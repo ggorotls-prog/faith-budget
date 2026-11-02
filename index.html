@@ -68,6 +68,30 @@ nav button.on{color:var(--main)}
 .bar{height:4px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--main)}
 .bar i.over{background:var(--bad)}
+/* 계정 창: 업무·영성·건강 기록과 같은 모양 */
+.bar-top{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 0}
+.bar-top strong{font-size:15px;color:var(--sub)}
+#menuBtn{border:1px solid var(--line);background:var(--card);border-radius:10px;min-height:36px;padding:0 12px;font-size:14px;font-weight:500;white-space:nowrap}
+.am-bg{position:fixed;inset:0;z-index:15;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px}
+.am{max-height:100%;overflow-y:auto;width:100%;max-width:360px;background:var(--card);border-radius:18px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.am-head{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 12px}
+.am-head strong{font-size:17px}
+.am-x{color:var(--sub);font-size:18px;width:36px;min-height:36px}
+.am-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;margin-top:8px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:15px}
+.am-item small{color:var(--sub);font-size:12px}
+.am-item .am-go{color:var(--sub);font-size:18px}
+.am-item.danger{color:var(--bad)}
+.am-back{color:var(--sub);font-size:14px;min-height:32px;padding:4px 2px}
+.f{display:grid;gap:4px;font-size:13px;color:var(--sub);margin-bottom:10px;text-align:left}
+.f input{font:inherit;color:var(--ink);padding:11px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff}
+.err{color:var(--bad);font-size:14px;min-height:20px;margin-bottom:6px;text-align:left}
+.main-btn{width:100%;padding:13px;border-radius:10px;font-weight:700;background:var(--main);color:#fff}
+.main-btn:disabled{opacity:.5}
+#auth{flex:1;overflow:auto;padding:48px 20px;text-align:center}
+#auth h1{margin:0 0 4px;font-size:24px}
+#auth p{margin:0 0 20px;color:var(--sub)}
+#auth form{background:var(--card);border-radius:14px;padding:16px;max-width:360px;margin:0 auto}
+[hidden]{display:none!important}
 /* 알림·창 */
 #toast{position:fixed;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom));background:#1c2420;color:#fff;border-radius:12px;padding:12px 14px;display:none;gap:10px;align-items:center;flex-wrap:wrap;z-index:9}
 #toast.on{display:flex}
@@ -87,6 +111,30 @@ nav button.on{color:var(--main)}
 </head>
 <body>
 <div id="msg">불러오는 중…</div>
+<div id="auth" hidden></div>
+<div class="bar-top" id="barTop" hidden><strong>재정 기록</strong><button id="menuBtn" aria-label="내 계정"><span id="myName"></span> ☰</button></div>
+<div class="am-bg" id="amBg" role="dialog" aria-modal="true" aria-labelledby="amName" hidden>
+  <div class="am">
+    <div class="am-head"><strong id="amName"></strong><button type="button" class="am-x" id="amClose" aria-label="닫기">✕</button></div>
+    <div id="amMain">
+      <button type="button" class="am-item" id="amSet"><span>⚙️ 설정</span><span class="am-go">›</span></button>
+      <button type="button" class="am-item danger" id="amOut"><span>로그아웃</span><small>모든 기기에서 나가져요</small></button>
+    </div>
+    <div id="amSetView" hidden>
+      <button type="button" class="am-back" id="amBack">‹ 처음으로</button>
+      <button type="button" class="am-item" id="amPw"><span>비밀번호 바꾸기</span><span class="am-go">›</span></button>
+    </div>
+    <form id="pwForm" hidden>
+      <button type="button" class="am-back" id="pwBack">‹ 설정으로</button>
+      <p id="pwMust" style="font-size:14px;color:var(--sub)" hidden>처음 비밀번호예요. 나만 아는 새 비밀번호로 바꿔 주세요. 바꾼 비밀번호는 다른 사람이 알 수 없어요.</p>
+      <label class="f" style="margin-top:6px">지금 비밀번호<input id="pwNow" type="password" autocomplete="current-password" required></label>
+      <label class="f">새 비밀번호 (6자 이상, 영어+숫자)<input id="pwNew" type="password" autocomplete="new-password" required minlength="6"></label>
+      <label class="f">새 비밀번호 한 번 더<input id="pwNew2" type="password" autocomplete="new-password" required minlength="6"></label>
+      <div class="err" id="pwErr"></div>
+      <button class="main-btn" id="pwGo">바꾸기</button>
+    </form>
+  </div>
+</div>
 <main id="v-rec">
   <div class="top">
     <div class="seg"><button id="k-out" class="on">지출</button><button id="k-in" class="in">수입</button></div>
@@ -115,19 +163,18 @@ const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today=()=>ymd(new Date());
 const TITHE=['근로소득','미지정공급','사업소득'];   // 기록 뒤 십일조 버튼을 띄우는 수입
 
-let token=null;
-try{
-  const m=location.hash.match(/k=([0-9a-f]{64})/);
-  if(m){localStorage.setItem('fin_token',m[1]);history.replaceState(null,'',location.pathname)}
-  token=localStorage.getItem('fin_token');
-}catch(e){}
+// 로그인 = 업무·영성·건강 기록과 같은 공용 계정(2026-11-02 룡 결정)
+const store={get(){try{return localStorage.getItem('fin_session')}catch(e){return null}},set(t){try{localStorage.setItem('fin_session',t)}catch(e){}},del(){try{localStorage.removeItem('fin_session');localStorage.removeItem('fin_token')}catch(e){}}};
+let token=store.get(),me=null;
 
 const st={kind:'지출',date:today(),amount:'',busy:false,month:today().slice(0,7)+'-01',data:null,open:{}};
 
 async function rpc(fn,args){
   const r=await fetch(API+fn,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_token:token,...args})});
   const t=await r.text();
-  if(!r.ok){let m=t;try{m=JSON.parse(t).message}catch(e){}throw new Error(m)}
+  if(!r.ok){let m=t;try{m=JSON.parse(t).message}catch(e){}
+    if(m==='auth'){logout();throw new Error('다시 로그인해 주세요.')}
+    throw new Error(m)}
   return t?JSON.parse(t):null;
 }
 async function load(){st.data=await rpc('fin_load',{p_month:st.month});render()}
@@ -297,20 +344,63 @@ $('#nav').onclick=e=>{if(e.target.dataset.v)show(e.target.dataset.v)};
 window.addEventListener('unhandledrejection',e=>toast('문제가 생겼습니다: '+(e.reason&&e.reason.message||e.reason),[],6000));
 
 (async()=>{
-  if(!token){askLink();return}
-  try{await load();$('#msg').remove();$('#nav').hidden=false;show('rec')}
-  catch(e){askLink('열지 못했습니다: '+e.message)}
+  $('#msg').hidden=true;
+  if(!token){renderAuth();return}
+  try{await enter()}
+  catch(e){if(token){$('#msg').hidden=false;$('#msg').textContent='열지 못했습니다: '+e.message}}
 })();
-// 앱에서 처음 한 번: 받은 링크를 붙여 넣으면 폰에 기억한다
-function askLink(err){
-  $('#msg').innerHTML=`<p>${esc(err||'받은 링크를 처음 한 번만 붙여 넣어 주세요.')}</p>
-    <input id="lnk" class="memo" style="margin:0 0 10px;width:100%" placeholder="링크 붙여넣기" autocomplete="off">
-    <div class="btns"><button class="ok" id="lnkGo">열기</button></div>`;
-  $('#lnkGo').onclick=()=>{const m=$('#lnk').value.match(/[0-9a-f]{64}/);
-    if(!m){toast('링크를 다시 확인해 주세요',[],2000);return}
-    try{localStorage.setItem('fin_token',m[0])}catch(e){}
-    location.reload()};
+async function enter(){
+  me=await rpc('fin_me',{});await load();
+  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;show('rec');
+  if(me.must_change_pw)forcePw();
 }
+function logout(){
+  token=null;me=null;st.data=null;store.del();
+  $('#barTop').hidden=true;$('#nav').hidden=true;$('#amBg').hidden=true;unforcePw();
+  document.querySelectorAll('main').forEach(m=>m.classList.remove('on'));
+  renderAuth();
+}
+function renderAuth(){
+  const a=$('#auth');a.hidden=false;
+  a.innerHTML=`<h1>재정 기록</h1><p>돈 쓰고 들어온 것을 바로</p>
+   <form id="lf"><label class="f">아이디<input id="nick" autocomplete="username" required></label>
+   <label class="f">비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
+   <div class="err" id="err"></div><button class="main-btn" id="go">들어가기</button></form>`;
+  $('#lf').onsubmit=async e=>{e.preventDefault();const go=$('#go'),err=$('#err');go.disabled=true;err.textContent='';
+    try{
+      const r=await fetch(API+'fin_login',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_id:$('#nick').value,p_pw:$('#pw').value})});
+      const d=await r.json();
+      if(!r.ok||d.error){err.textContent=d.error||'들어가지 못했어요. 다시 해 주세요.';go.disabled=false;return}
+      token=d.token;store.set(token);await enter();
+    }catch(x){err.textContent='인터넷 연결을 확인해 주세요.';go.disabled=false}};
+}
+/* ☰ 계정 창. 로그아웃·비밀번호 바꾸기는 다른 기록들처럼 모든 기기에서 나간다 */
+/* 처음 비밀번호면 바꾸기 전에는 닫히지 않는다(업무·영성·건강 기록과 같음) */
+let pwForced=false;
+function amView(v){$('#amMain').hidden=v!=='main';$('#amSetView').hidden=v!=='set';$('#pwForm').hidden=v!=='pw'}
+function forcePw(){
+  if(pwForced)return;pwForced=true;amView('pw');$('#pwForm').reset();$('#pwErr').textContent='';
+  $('#amName').textContent=me.name+'님';$('#amClose').hidden=$('#pwBack').hidden=true;$('#pwMust').hidden=false;$('#amBg').hidden=false;
+}
+function unforcePw(){pwForced=false;$('#amClose').hidden=$('#pwBack').hidden=false;$('#pwMust').hidden=true}
+$('#menuBtn').onclick=()=>{amView('main');$('#amName').textContent=me.name+'님';$('#amBg').hidden=false};
+$('#amClose').onclick=()=>{$('#amBg').hidden=true};
+$('#amBg').onclick=e=>{if(e.target.id==='amBg'&&!pwForced)$('#amBg').hidden=true};
+$('#amSet').onclick=()=>amView('set');
+$('#amBack').onclick=()=>amView('main');
+$('#pwBack').onclick=()=>amView('set');
+$('#amPw').onclick=()=>{$('#pwForm').reset();$('#pwErr').textContent='';amView('pw')};
+$('#amOut').onclick=async()=>{await rpc('fin_logout_all',{}).catch(()=>{});logout()};
+$('#pwForm').onsubmit=async e=>{
+  e.preventDefault();$('#pwErr').textContent='';
+  if($('#pwNew').value!==$('#pwNew2').value){$('#pwErr').textContent='새 비밀번호 두 칸이 서로 달라요.';return}
+  const btn=$('#pwGo');btn.disabled=true;
+  try{
+    const d=await rpc('fin_change_password',{p_current:$('#pwNow').value,p_next:$('#pwNew').value});
+    if(d.error){$('#pwErr').textContent=d.error;return}
+    logout();$('#err').textContent='비밀번호를 바꿨어요. 모든 기기에서 나갔어요. 새 비밀번호로 들어와 주세요.';
+  }catch(x){$('#pwErr').textContent=x.message}finally{btn.disabled=false}
+};
 // 앱을 다시 열 때 최신으로
 window.refresh=()=>{if(st.data&&!st.busy)load().catch(()=>{})};
 </script>
