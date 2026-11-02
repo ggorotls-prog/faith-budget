@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 서명 열쇠는 빌드할 때마다 새로 만든다. 그래서 앱을 새로 빌드해 깔려면 폰에서 지우고 다시 깐다(기록은 서버에 있어 그대로).
+def ks = System.getenv('KEYSTORE_FILE')
+
+android {
+    namespace 'app.faithbudget'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.faithbudget'
+        minSdk 29
+        targetSdk 35
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName "1.${System.getenv('GITHUB_RUN_NUMBER') ?: '0'}"
+    }
+
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storeType 'pkcs12'
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias 'budgetapp'
+                keyPassword System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (ks) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 카메라로 찍은 사진 파일 넘겨받기(FileProvider)
+    implementation 'androidx.core:core:1.13.1'
+}
