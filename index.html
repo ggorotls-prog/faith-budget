@@ -118,7 +118,7 @@ nav button.on{color:var(--main)}
     <div class="am-head"><strong id="amName"></strong><button type="button" class="am-x" id="amClose" aria-label="닫기">✕</button></div>
     <div id="amMain">
       <button type="button" class="am-item" id="amSet"><span>⚙️ 설정</span><span class="am-go">›</span></button>
-      <button type="button" class="am-item danger" id="amOut"><span>로그아웃</span><small>모든 기기에서 나가져요</small></button>
+      <button type="button" class="am-item danger" id="amOut"><span>로그아웃</span><small>이 앱의 모든 기기에서 나가져요</small></button>
     </div>
     <div id="amSetView" hidden>
       <button type="button" class="am-back" id="amBack">‹ 처음으로</button>
@@ -374,7 +374,7 @@ function renderAuth(){
       token=d.token;store.set(token);await enter();
     }catch(x){err.textContent='인터넷 연결을 확인해 주세요.';go.disabled=false}};
 }
-/* ☰ 계정 창. 로그아웃·비밀번호 바꾸기는 다른 기록들처럼 모든 기기에서 나간다 */
+/* ☰ 계정 창. 로그아웃은 이 앱의 모든 기기에서 나간다. 비밀번호를 바꾸면 계정이 같아 모든 기록에서 나간다 */
 /* 처음 비밀번호면 바꾸기 전에는 닫히지 않는다(업무·영성·건강 기록과 같음) */
 let pwForced=false;
 function amView(v){$('#amMain').hidden=v!=='main';$('#amSetView').hidden=v!=='set';$('#pwForm').hidden=v!=='pw'}
