@@ -41,8 +41,3 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
-
-dependencies {
-    // 카메라로 찍은 사진 파일 넘겨받기(FileProvider)
-    implementation 'androidx.core:core:1.13.1'
-}
