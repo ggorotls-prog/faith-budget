@@ -2,6 +2,10 @@
 -- 슈파베이스 「룡룡룡」 SQL 편집기에서 그대로 실행. 두 번 돌려도 안전(이미 있으면 건너뜀).
 alter table public.fin_items add column if not exists area text not null default '';
 alter table public.fin_entries add column if not exists created_by uuid;
+-- 같은 항목 이름이 영역마다 있으므로 고유키에 영역을 더한다
+alter table public.fin_items drop constraint if exists fin_items_book_id_kind_middle_detail_key;
+alter table public.fin_items drop constraint if exists fin_items_book_id_kind_middle_detail_area_key;
+alter table public.fin_items add constraint fin_items_book_id_kind_middle_detail_area_key unique (book_id,kind,middle,detail,area);
 create table if not exists public.fin_fixed (
   id uuid primary key default gen_random_uuid(),
   book_id uuid not null references public.fin_books(id),
