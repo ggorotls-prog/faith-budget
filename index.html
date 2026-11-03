@@ -124,11 +124,10 @@ nav button.on{color:var(--main)}
 .quick #v-rec{border-radius:16px 16px 0 0;background:var(--bg)}
 .quick #books{margin-left:0;margin-right:8px}
 .quick .date{margin-left:auto}
-/* 버튼식 기록 화면 */
-.fh{display:flex;align-items:center;gap:8px;padding:10px 12px 4px}
+/* 빠른 창 버튼식 */
+.fh{display:flex;align-items:center;gap:8px;padding:6px 12px 0}
 #back{font-size:26px;line-height:1;padding:2px 10px;color:var(--main);font-weight:700}
 #crumb{flex:1;min-width:0;font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#crumb .q{color:var(--sub);font-weight:600}
 #flow h4{margin:14px 0 6px;font-size:17px}
 #flow h5{margin:12px 0 4px;font-size:13px;color:var(--sub);font-weight:600}
 .bb{display:grid;gap:8px}
@@ -137,12 +136,9 @@ nav button.on{color:var(--main)}
 .bb button:active{background:var(--soft)}
 .bb button.wide{grid-column:1/-1}
 .bb button.fav{background:var(--soft);border-color:#bfe0d1}
-.bb button.out{background:var(--main);color:#fff;border:0;padding:26px 12px;font-size:20px}
-.bb button.inc{background:var(--in);color:#fff;border:0;padding:26px 12px;font-size:20px}
 .bb button.more{background:var(--bg);color:var(--sub);border-style:dashed;font-weight:600}
-#pay{display:flex;flex-direction:column;flex:1;min-height:0}
-#pay .keys{margin-top:auto}
-#pay .save{border-radius:0;padding:15px;font-size:17px}
+.quick .amount{margin-top:auto}
+#saveBtn.save{border-radius:0;padding:15px;font-size:17px}
 </style>
 </head>
 <body>
@@ -172,14 +168,18 @@ nav button.on{color:var(--main)}
   </div>
 </div>
 <main id="v-rec">
-  <div class="fh"><button id="back" aria-label="뒤로" hidden>‹</button><div id="crumb"></div><label class="date"><span id="dateLbl"></span><input type="date" id="date" aria-label="날짜"></label></div>
-  <div id="flow" class="scroll"></div>
-  <div id="pay" hidden>
-    <div id="amt" class="amount zero">0원</div>
-    <input id="memo" class="memo" placeholder="메모 (안 써도 됩니다)" autocomplete="off">
-    <div class="keys" id="keys"></div>
-    <button id="saveBtn" class="main-btn save">저장</button>
+  <div class="top">
+    <div class="seg"><button id="k-out" class="on">지출</button><button id="k-in" class="in">수입</button></div>
+    <label class="date"><span id="dateLbl"></span><input type="date" id="date" aria-label="날짜"></label>
   </div>
+  <div class="fh" id="fh" hidden><button id="back" aria-label="뒤로" hidden>‹</button><div id="crumb"></div></div>
+  <div id="flow" class="scroll" hidden></div>
+  <div id="amt" class="amount zero">0원</div>
+  <input id="memo" class="memo" placeholder="메모 (안 써도 됩니다)" autocomplete="off">
+  <div id="fixed" class="fx" hidden></div>
+  <div id="chips" class="chips"></div>
+  <div class="keys" id="keys"></div>
+  <button id="saveBtn" class="main-btn save" hidden>저장</button>
 </main>
 <main id="v-list"><div class="month" data-m></div><div id="list" class="scroll"></div></main>
 <main id="v-bud"><div class="month" data-m></div><div id="bud" class="scroll"></div></main>
@@ -235,9 +235,7 @@ function toast(text,actions=[],ms=5000){
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms);
 }
 
-/* 기록: 버튼식, 한 화면에 한 질문 (2026-11-03 룡: 한 페이지에 다 띄우지 말고 버튼식으로)
-   지출|수입 → 가정|기업 → (기업) 영역 → 항목 → 금액·메모 → 저장. 위젯·One hand·앱 안 모두 같은 흐름 */
-const sel={kind:null,book:null,area:null,item:null};
+/* 기록 */
 function renderAmount(){
   const a=$('#amt');a.textContent=won(st.amount||0);a.classList.toggle('zero',!st.amount);
 }
@@ -246,80 +244,87 @@ function renderDate(){
   $('#dateLbl').textContent=(st.date===today()?'오늘 ':'')+`${d.getMonth()+1}/${d.getDate()} (${'일월화수목금토'[d.getDay()]})`;
   $('#date').value=st.date;
 }
-function startFlow(kind){sel.kind=kind||null;sel.book=null;sel.area=null;sel.item=null;st.amount='';st.more=false;$('#memo').value='';renderFlow()}
-const stepOf=()=>!sel.kind?'kind':!sel.book?'book':(isCo()&&sel.area===null)?'area':!sel.item?'item':'amount';
-const bookName=id=>((me.books||[]).find(b=>b.id===id)||{}).name||'';
-const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</button>`;
-function renderFlow(){
-  const step=stepOf();
-  $('#pay').hidden=step!=='amount';$('#flow').hidden=step==='amount';
-  $('#back').hidden=step==='kind'||(QUICK&&step==='book');
-  const crumb=[sel.kind,sel.book&&bookName(sel.book),sel.area===null?null:(sel.area||'공통'),sel.item&&itemName(sel.item)].filter(Boolean);
-  $('#crumb').innerHTML=crumb.length?crumb.map(esc).join(' › '):'<span class="q">무엇을 기록할까요?</span>';
+function chip(i,name,fav){return `<button class="chip${fav?' fav':''}" data-id="${i.id}">${esc(name)}</button>`}
+function renderChips(){
+  const list=items().filter(i=>i.kind===st.kind);
+  // 식비는 주차를 날짜로 정하므로 칩 하나로 보인다
+  const wk=weekItem(st.date);
+  let leaf=list.filter(i=>!isWeek(i)||i===wk);
+  // 가정 지출: 매일 쓰는 것만, 「그 밖에…」를 누르면 전부
+  const trimmed=!isCo()&&st.kind==='지출'&&!st.more;
+  if(trimmed)leaf=leaf.filter(isDaily);
+  const name=i=>isWeek(i)?'식비':label(i);
+  const count=i=>isWeek(i)?list.filter(isWeek).reduce((s,x)=>s+(st.data.usage[x.id]||0),0):(st.data.usage[i.id]||0);
   let h='';
-  if(step==='kind')h=`<div class="bb two"><button data-kind="지출" class="out">− 지출</button><button data-kind="수입" class="inc">+ 수입</button></div>`;
-  else if(step==='book')h=`<h4>어느 장부?</h4><div class="bb two">${(me.books||[]).map(b=>bigBtn(`data-book="${b.id}"`,b.name)).join('')}</div>`;
-  else if(step==='area'){
-    const areas=[...new Set(items().filter(i=>i.area).map(i=>i.area))];
-    h=`<h4>어느 영역?</h4><div class="bb two">${areas.map(a=>bigBtn(`data-area="${esc(a)}"`,a)).join('')}${bigBtn('data-area=""','공통 (영역 없음)','wide')}</div>`;
+  if(st.kind==='지출'){
+    const fav=[...leaf].filter(i=>count(i)>0).sort((a,b)=>count(b)-count(a)).slice(0,9);
+    if(fav.length)h+=`<h4>자주 쓰는 것</h4><div class="row">${fav.map(i=>chip(i,(i.area?i.area+' ':'')+name(i),1)).join('')}</div>`;
   }
-  else if(step==='item')h=itemButtons();
-  $('#flow').innerHTML=h;
-  if(step==='amount')renderAmount();
-}
-const itemName=i=>isWeek(i)?'식비':(i.detail?i.middle+' · '+i.detail:i.middle);
-function itemButtons(){
-  let list=items().filter(i=>i.kind===sel.kind);
-  if(isCo())list=list.filter(i=>(i.area||'')===sel.area);
-  // 식비는 주차를 날짜로 정하므로 버튼 하나
-  const wk=weekItem(st.date);list=list.filter(i=>!isWeek(i)||i===wk);
-  // 가정 지출: 매일 쓰는 것만, 「그 밖에」를 누르면 전부
-  const trimmed=!isCo()&&sel.kind==='지출'&&!st.more;
-  if(trimmed)list=list.filter(isDaily);
-  const count=i=>isWeek(i)?items().filter(isWeek).reduce((s,x)=>s+(st.data.usage[x.id]||0),0):(st.data.usage[i.id]||0);
-  let h='<h4>어떤 항목?</h4>';
-  const fav=[...list].filter(i=>count(i)>0).sort((a,b)=>count(b)-count(a)).slice(0,6);
-  if(fav.length&&list.length>6)h+=`<h5>자주 쓰는 것</h5><div class="bb two">${fav.map(i=>bigBtn(`data-item="${i.id}"`,itemName(i),'fav')).join('')}</div>`;
   const groups=[];
-  list.forEach(i=>{const k=isCo()?(sel.area?'':i.bucket):(i.detail&&!isWeek(i)?i.middle:'');let g=groups.find(x=>x.k===k);if(!g)groups.push(g={k,a:[]});g.a.push(i)});
-  groups.forEach(g=>{h+=(g.k?`<h5>${esc(g.k)}</h5>`:'')+`<div class="bb two">${g.a.map(i=>bigBtn(`data-item="${i.id}"`,isWeek(i)?'식비':(i.detail||i.middle))).join('')}</div>`});
-  if(trimmed)h+=`<div class="bb"><button class="more" data-more="1">그 밖에…</button></div>`;
-  else if(!isCo()&&sel.kind==='지출'&&st.more)h+=`<div class="bb"><button class="more" data-more="0">매일 쓰는 것만</button></div>`;
-  return h;
+  // 기업: 영역 이름 아래 매출·재료비·인건비, 그다음 공통 경비는 분류별
+  leaf.forEach(i=>{const k=isCo()?(i.area||(st.kind==='수입'?'기타 수입':i.bucket)):(st.kind==='수입'?'수입':(i.detail&&!isWeek(i)?i.middle:i.bucket));let g=groups.find(x=>x.k===k);if(!g)groups.push(g={k,a:[]});g.a.push(i)});
+  h+=groups.map(g=>`<h4>${esc(g.k)}</h4><div class="row">${g.a.map(i=>chip(i,name(i),st.kind==='수입')).join('')}</div>`).join('');
+  if(trimmed)h+=`<div class="row" style="margin-top:10px"><button class="chip more" data-more="1">그 밖에…</button></div>`;
+  else if(!isCo()&&st.kind==='지출'&&st.more)h+=`<div class="row" style="margin-top:10px"><button class="chip more" data-more="0">매일 쓰는 것만</button></div>`;
+  $('#chips').innerHTML=h;
+  $('#chips').parentElement.classList.toggle('in',st.kind==='수입');
+  renderFixed();
 }
-$('#flow').onclick=async e=>{
-  const b=e.target.closest('button');if(!b)return;const d=b.dataset;
-  if(d.kind){sel.kind=d.kind;renderFlow();return}
-  if(d.book){sel.book=d.book;if(st.book!==d.book){st.book=d.book;st.fxOpen=null;try{localStorage.setItem('fin_book',d.book)}catch(x){}renderBooks();await load()}renderFlow();return}
-  if(d.area!==undefined){sel.area=d.area;renderFlow();return}
-  if(d.more!==undefined){st.more=d.more==='1';renderFlow();return}
-  if(d.item){sel.item=item(d.item);renderFlow();return}
+/* 기업 고정 경비: 예산안 「월 고정지출」대로 미리 깔려 있고 「냈어요」 한 번이면 기록된다 */
+// 가정 고정 지출 = 매일 쓰는 것이 아닌 지출 항목 중 이 달 예산이 있는 것. 금액은 예산값, 「냈어요」로 기록
+function homeFixed(){
+  const it=items().filter(i=>i.kind==='지출');
+  const base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(st.data.budgets[i.id]||0),0);
+  const ym=st.month.slice(0,7);
+  return it.filter(i=>!isDaily(i)&&!isWeek(i)).map(i=>({id:i.id,item_id:i.id,name:i.detail?i.middle+' · '+i.detail:i.middle,day:null,amount:budgetOf(i,base),
+    paid:(st.data.entries.find(e=>e.fixed==='fixed:'+i.id+':'+ym)||{}).id})).filter(f=>f.amount>0);
+}
+const fixedList=()=>isCo()?st.data.fixed:homeFixed();
+function renderFixed(){
+  const el=$('#fixed');const fx=st.kind==='지출'?fixedList():[];
+  el.hidden=!fx.length;if(!fx.length)return;
+  if(st.fxOpen===null)st.fxOpen=isCo();   // 기업은 경비부터(기준 ⑤), 가정은 접어 둠
+  const done=fx.filter(f=>f.paid).length;
+  el.innerHTML=`<h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 ${isCo()?'경비':'지출'}</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+Number(f.amount),0))}</small></h4>`+
+   (st.fxOpen?fx.map(f=>`<div class="fr${f.paid?' ok':''}"><span>${esc(f.name)} <em>${f.day?f.day+'일':''}</em></span><b>${Number(f.amount)?won(f.amount):'<em>금액 눌러서</em>'}</b>${f.paid?'<em>냈음</em>':`<button data-f="${f.id}">냈어요</button>`}</div>`).join(''):'');
+}
+$('#fixed').onclick=async e=>{
+  if(e.target.closest('[data-t]')){st.fxOpen=!st.fxOpen;renderFixed();return}
+  const id=e.target.dataset.f;if(!id||st.busy)return;
+  const f=fixedList().find(x=>x.id===id);
+  // 금액이 정해지지 않은 고정 경비(국민연금처럼 0원)는 키패드에 누른 금액으로
+  const amount=Number(f.amount)||Number(st.amount);
+  if(!amount){const a=$('#amt');a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake');toast(f.name+' 금액을 먼저 눌러 주세요',[],1500);return}
+  st.busy=true;
+  try{
+    // 보는 달이 이번 달이면 오늘, 지난달이면 그 달의 납부일로
+    const date=st.month.slice(0,7)===today().slice(0,7)?today():st.month.slice(0,8)+pad(f.day||1);
+    const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:amount,p_memo:f.name,p_book:st.book,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
+    if(!Number(f.amount)){st.amount='';renderAmount()}
+    toast(`${f.name} ${won(amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await load();toast('취소했습니다',[],1500)}]],4000);
+    await load();if(QUICK)setTimeout(closeQuick,900);
+  }catch(x){toast('저장 안 됨. 인터넷을 확인하고 다시 눌러 주세요. ('+x.message+')',[],8000)}
+  st.busy=false;
 };
-$('#back').onclick=()=>{
-  const step=stepOf();
-  if(step==='amount')sel.item=null;else if(step==='item'){if(isCo())sel.area=null;else sel.book=null}
-  else if(step==='area')sel.book=null;else if(step==='book')sel.kind=null;
-  if(stepOf()==='book'&&QUICK&&!sel.book&&!sel.kind)sel.kind=st.kind; // 빠른 창은 종류가 정해져 있다
-  renderFlow();
-};
-async function save(){
-  const i=sel.item;if(!i||st.busy)return;
-  if(!st.amount){const a=$('#amt');a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake');toast('금액을 눌러 주세요',[],1500);return}
+async function save(i){
+  if(st.busy)return;
+  if(!st.amount){const a=$('#amt');a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake');toast('금액을 먼저 눌러 주세요',[],1500);return}
   st.busy=true;
   const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date;
   try{
     const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:st.book});
-    const name=(i.area?i.area+' ':'')+itemName(i);
+    st.amount='';$('#memo').value='';renderAmount();
+    const name=isWeek(i)?'식비':(i.area?i.area+' ':'')+label(i);
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await load();toast('취소했습니다',[],1500)}]];
     if(i.kind==='수입'&&TITHE.includes(i.middle)){
       const t=Math.ceil(amount/10),ti=items().find(x=>x.middle==='십일조(10%)');
-      if(ti)acts.unshift([`십일조 ${t.toLocaleString('ko-KR')}원도 기록`,async()=>{await rpc('fin_add',{p_date:date,p_item:ti.id,p_amount:t,p_memo:'',p_book:st.book});await load();toast('십일조도 기록했습니다',[],1500)}]);
+      if(ti)acts.unshift([`십일조 ${t.toLocaleString('ko-KR')}원도 기록`,async()=>{await rpc('fin_add',{p_date:date,p_item:ti.id,p_amount:t,p_memo:''});await load();toast('십일조도 기록했습니다',[],1500)}]);
     }
     toast(`${name} ${won(amount)} 기록`,acts,acts.length>1?9000:4000);
-    startFlow(QUICK?st.kind:null);   // 앱은 처음으로, 빠른 창은 닫힘
     await load();
+    // 빠른 창은 저장하면 닫힌다. 십일조 버튼이 있을 때만 누를 시간을 준다
     if(QUICK)setTimeout(closeQuick,acts.length>1?6000:900);
-  }catch(e){toast('저장 안 됨. 인터넷을 확인하고 다시 눌러 주세요. ('+e.message+')',[],8000)}
+  }catch(e){toast('저장 안 됨. 인터넷을 확인하고 항목을 다시 눌러 주세요. ('+e.message+')',[],8000)}
   st.busy=false;
 }
 function press(k){
@@ -330,42 +335,66 @@ function press(k){
 }
 $('#keys').innerHTML=['1','2','3','C','4','5','6','지움','7','8','9','00','0','000'].map(k=>`<button type="button" class="${k==='C'||k==='지움'?'sm':''}" data-k="${k}"${k==='000'?' style="grid-column:span 3"':''}>${k}</button>`).join('');
 $('#keys').onclick=e=>{const k=e.target.dataset.k;if(k)press(k)};
-$('#saveBtn').onclick=save;
-$('#date').onchange=e=>{if(e.target.value){st.date=e.target.value;renderDate();if(stepOf()==='item')renderFlow()}};
+$('#chips').onclick=e=>{if(e.target.dataset.more!==undefined){st.more=e.target.dataset.more==='1';renderChips();return}const id=e.target.dataset.id;if(id)save(item(id))};
+function setKind(k){st.kind=k;$('#k-out').classList.toggle('on',k==='지출');$('#k-in').classList.toggle('on',k==='수입');renderChips()}
+$('#k-out').onclick=()=>setKind('지출');$('#k-in').onclick=()=>setKind('수입');
+$('#date').onchange=e=>{if(e.target.value){st.date=e.target.value;renderDate();if(QUICK)renderFlow();else renderChips()}};
 
-/* 고정 경비(기업)·고정 지출(가정): 손익·예산안 탭 맨 위. 미리 깔려 있고 「냈어요」 한 번이면 기록된다 */
-// 가정 고정 지출 = 매일 쓰는 것이 아닌 지출 항목 중 이 달 예산이 있는 것. 금액은 예산값
-function homeFixed(){
-  const it=items().filter(i=>i.kind==='지출');
-  const base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(st.data.budgets[i.id]||0),0);
-  const ym=st.month.slice(0,7);
-  return it.filter(i=>!isDaily(i)&&!isWeek(i)).map(i=>({id:i.id,item_id:i.id,name:i.detail?i.middle+' · '+i.detail:i.middle,day:null,amount:budgetOf(i,base),
-    paid:(st.data.entries.find(e=>e.fixed==='fixed:'+i.id+':'+ym)||{}).id})).filter(f=>f.amount>0);
+/* 빠른 창(위젯·One hand)만 버튼식, 한 화면에 한 질문 (2026-11-03 룡: 위젯은 버튼식, 앱은 그대로)
+   (위젯에서 정한 지출|수입) → 가정|기업 → (기업) 영역 → 항목 → 금액·메모 → 저장 → 닫힘 */
+const sel={book:null,area:null,item:null};
+function startFlow(){sel.book=null;sel.area=null;sel.item=null;st.amount='';st.more=false;$('#memo').value='';renderFlow()}
+const stepOf=()=>!sel.book?'book':(isCo()&&sel.area===null)?'area':!sel.item?'item':'amount';
+const bookName=id=>((me.books||[]).find(b=>b.id===id)||{}).name||'';
+const itemName=i=>isWeek(i)?'식비':(i.detail?i.middle+' · '+i.detail:i.middle);
+const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</button>`;
+function renderFlow(){
+  if(!QUICK)return;
+  const step=stepOf(),pay=step==='amount';
+  ['#amt','#memo','#keys'].forEach(s=>$(s).hidden=!pay);$('#saveBtn').hidden=!pay;$('#chips').hidden=true;$('#fixed').hidden=true;
+  $('#flow').hidden=pay;$('#back').hidden=step==='book';
+  const crumb=[st.kind,sel.book&&bookName(sel.book),sel.area===null?null:(sel.area||'공통'),sel.item&&itemName(sel.item)].filter(Boolean);
+  $('#crumb').textContent=crumb.join(' › ');
+  let h='';
+  if(step==='book')h=`<h4>어느 장부?</h4><div class="bb two">${(me.books||[]).map(b=>bigBtn(`data-book="${b.id}"`,b.name)).join('')}</div>`;
+  else if(step==='area'){
+    const areas=[...new Set(items().filter(i=>i.area).map(i=>i.area))];
+    h=`<h4>어느 영역?</h4><div class="bb two">${areas.map(a=>bigBtn(`data-area="${esc(a)}"`,a)).join('')}${bigBtn('data-area=""','공통 (영역 없음)','wide')}</div>`;
+  }
+  else if(step==='item')h=itemButtons();
+  $('#flow').innerHTML=h;
+  if(pay)renderAmount();
 }
-const fixedList=()=>isCo()?st.data.fixed:homeFixed();
-function fixedHtml(){
-  const fx=fixedList();if(!fx.length)return '';
-  if(st.fxOpen===null)st.fxOpen=isCo();   // 기업은 경비부터(기준 ⑤), 가정은 접어 둠
-  const done=fx.filter(f=>f.paid).length;
-  return `<div class="fx"><h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 ${isCo()?'경비':'지출'}</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+Number(f.amount),0))}</small></h4>`+
-   (st.fxOpen?fx.map(f=>`<div class="fr${f.paid?' ok':''}"><span>${esc(f.name)} <em>${f.day?f.day+'일':''}</em></span><b>${Number(f.amount)?won(f.amount):'<em>금액은 눌러서</em>'}</b>${f.paid?'<em>냈음</em>':`<button data-f="${f.id}">냈어요</button>`}</div>`).join(''):'')+'</div>';
+function itemButtons(){
+  let list=items().filter(i=>i.kind===st.kind);
+  if(isCo())list=list.filter(i=>(i.area||'')===sel.area);
+  const wk=weekItem(st.date);list=list.filter(i=>!isWeek(i)||i===wk);   // 식비는 주차를 날짜로 정하므로 버튼 하나
+  const trimmed=!isCo()&&st.kind==='지출'&&!st.more;                       // 가정 지출: 매일 쓰는 것만, 「그 밖에」로 전부
+  if(trimmed)list=list.filter(isDaily);
+  const count=i=>isWeek(i)?items().filter(isWeek).reduce((s,x)=>s+(st.data.usage[x.id]||0),0):(st.data.usage[i.id]||0);
+  let h='<h4>어떤 항목?</h4>';
+  const fav=[...list].filter(i=>count(i)>0).sort((a,b)=>count(b)-count(a)).slice(0,6);
+  if(fav.length&&list.length>6)h+=`<h5>자주 쓰는 것</h5><div class="bb two">${fav.map(i=>bigBtn(`data-item="${i.id}"`,itemName(i),'fav')).join('')}</div>`;
+  const groups=[];
+  list.forEach(i=>{const k=isCo()?(sel.area?'':i.bucket):(i.detail&&!isWeek(i)?i.middle:'');let g=groups.find(x=>x.k===k);if(!g)groups.push(g={k,a:[]});g.a.push(i)});
+  groups.forEach(g=>{h+=(g.k?`<h5>${esc(g.k)}</h5>`:'')+`<div class="bb two">${g.a.map(i=>bigBtn(`data-item="${i.id}"`,isWeek(i)?'식비':(i.detail||i.middle))).join('')}</div>`});
+  if(trimmed)h+=`<div class="bb"><button class="more" data-more="1">그 밖에…</button></div>`;
+  else if(!isCo()&&st.kind==='지출'&&st.more)h+=`<div class="bb"><button class="more" data-more="0">매일 쓰는 것만</button></div>`;
+  return h;
 }
-async function payFixed(id){
-  if(st.busy)return;
-  const f=fixedList().find(x=>x.id===id);
-  let amount=Number(f.amount);
-  // 금액이 정해지지 않은 고정 경비(국민연금처럼 0원)는 물어서
-  if(!amount){const v=prompt(f.name+' 금액');amount=Number(String(v||'').replace(/\D/g,''));if(!amount)return}
-  st.busy=true;
-  try{
-    // 보는 달이 이번 달이면 오늘, 지난달이면 그 달의 납부일로
-    const date=st.month.slice(0,7)===today().slice(0,7)?today():st.month.slice(0,8)+pad(f.day||1);
-    const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:amount,p_memo:f.name,p_book:st.book,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
-    toast(`${f.name} ${won(amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await load();toast('취소했습니다',[],1500)}]],4000);
-    await load();
-  }catch(x){toast('저장 안 됨. 인터넷을 확인하고 다시 눌러 주세요. ('+x.message+')',[],8000)}
-  st.busy=false;
-}
+$('#flow').onclick=async e=>{
+  const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.book){sel.book=d.book;if(st.book!==d.book){st.book=d.book;st.fxOpen=null;try{localStorage.setItem('fin_book',d.book)}catch(x){}renderBooks();await load()}renderFlow();return}
+  if(d.area!==undefined){sel.area=d.area;renderFlow();return}
+  if(d.more!==undefined){st.more=d.more==='1';renderFlow();return}
+  if(d.item){sel.item=item(d.item);renderFlow();return}
+};
+$('#back').onclick=()=>{
+  const step=stepOf();
+  if(step==='amount')sel.item=null;else if(step==='item'){if(isCo())sel.area=null;else sel.book=null}else if(step==='area')sel.book=null;
+  renderFlow();
+};
+$('#saveBtn').onclick=()=>{if(sel.item)save(sel.item)};
 
 /* 달 이동 */
 function renderMonth(){
@@ -430,7 +459,7 @@ function renderProfit(){
   const unpaid=(st.data.fixed||[]).filter(f=>!f.paid);
   if(unpaid.length)h+=row('아직 안 낸 고정 경비 '+unpaid.length+'건',unpaid.reduce((s,f)=>s+Number(f.amount),0));
   h+='</div>';
-  $('#bud').innerHTML=fixedHtml()+h;
+  $('#bud').innerHTML=h;
 }
 function renderBudget(){
   if(isCo()){renderProfit();return}
@@ -461,12 +490,10 @@ function renderBudget(){
     });
     h+='</div>';
   });
-  $('#bud').innerHTML=fixedHtml()+h;
+  $('#bud').innerHTML=h;
 }
 $('#bud').onclick=e=>{
-  if(e.target.closest('[data-t]')){st.fxOpen=!st.fxOpen;renderBudget();return}
   const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.f){payFixed(b.dataset.f);return}
   if(b.dataset.o){st.open[b.dataset.o]=!st.open[b.dataset.o];renderBudget();return}
   if(b.dataset.b)editBudget(item(b.dataset.b));
 };
@@ -479,13 +506,13 @@ function editBudget(i){
   $('#dlg').classList.add('on');
 }
 
-function render(){renderDate();renderFlow();renderMonth();renderList();renderBudget();$('#nav3').textContent=isCo()?'손익':'예산안'}
+function render(){renderDate();renderAmount();if(QUICK)renderFlow();else renderChips();renderMonth();renderList();renderBudget();$('#nav3').textContent=isCo()?'손익':'예산안'}
 /* 장부 고르기: 두 장부가 있을 때만 보인다. 마지막에 본 장부를 기억한다 */
 function renderBooks(){
   const bs=me.books||[];const el=$('#books');el.hidden=bs.length<2;
   el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
 }
-$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();startFlow(QUICK?st.kind:null);await load();show('rec')};
+$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.amount='';await load();show('rec')};
 function show(v){
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
@@ -504,7 +531,7 @@ async function enter(){
   const bs=me.books||[];let saved=null;try{saved=localStorage.getItem('fin_book')}catch(x){}
   st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
   renderBooks();await load();
-  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;show('rec');startFlow(QUICK?st.kind:null);renderFlow();
+  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;show('rec');if(QUICK){$('#fh').hidden=false;$('#v-rec .top .seg').hidden=true;startFlow()}else setKind(st.kind);
   if(me.must_change_pw)forcePw();
 }
 function logout(){
