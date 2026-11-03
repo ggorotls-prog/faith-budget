@@ -226,7 +226,7 @@ async function load(){st.data=await rpc('fin_load',{p_month:st.month,p_book:st.b
 const items=()=>st.data.items;
 const item=id=>items().find(i=>i.id===id);
 const label=i=>i.detail||i.middle;
-const isWeek=i=>i.middle==='식비';
+const isWeek=i=>i.middle==='식비'&&/주차$/.test(i.detail||'');   // 가정 식비만 주차(기업 식비는 보통 항목)
 const weekItem=date=>{const w=Math.ceil(Number(date.slice(8))/7);return items().find(i=>isWeek(i)&&i.detail===w+'주차')};
 
 function toast(text,actions=[],ms=5000){
