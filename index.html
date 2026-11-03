@@ -240,17 +240,22 @@ function renderFixed(){
   el.hidden=!fx.length;if(!fx.length)return;
   const done=fx.filter(f=>f.paid).length;
   el.innerHTML=`<h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 경비</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+Number(f.amount),0))}</small></h4>`+
-   (st.fxOpen?fx.map(f=>`<div class="fr${f.paid?' ok':''}"><span>${esc(f.name)} <em>${f.day?f.day+'일':''}</em></span><b>${won(f.amount)}</b>${f.paid?'<em>냈음</em>':`<button data-f="${f.id}">냈어요</button>`}</div>`).join(''):'');
+   (st.fxOpen?fx.map(f=>`<div class="fr${f.paid?' ok':''}"><span>${esc(f.name)} <em>${f.day?f.day+'일':''}</em></span><b>${Number(f.amount)?won(f.amount):'<em>금액 눌러서</em>'}</b>${f.paid?'<em>냈음</em>':`<button data-f="${f.id}">냈어요</button>`}</div>`).join(''):'');
 }
 $('#fixed').onclick=async e=>{
   if(e.target.closest('[data-t]')){st.fxOpen=!st.fxOpen;renderFixed();return}
   const id=e.target.dataset.f;if(!id||st.busy)return;
-  const f=st.data.fixed.find(x=>x.id===id);st.busy=true;
+  const f=st.data.fixed.find(x=>x.id===id);
+  // 금액이 정해지지 않은 고정 경비(국민연금처럼 0원)는 키패드에 누른 금액으로
+  const amount=Number(f.amount)||Number(st.amount);
+  if(!amount){const a=$('#amt');a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake');toast(f.name+' 금액을 먼저 눌러 주세요',[],1500);return}
+  st.busy=true;
   try{
     // 보는 달이 이번 달이면 오늘, 지난달이면 그 달의 납부일로
     const date=st.month.slice(0,7)===today().slice(0,7)?today():st.month.slice(0,8)+pad(f.day||1);
-    const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:Number(f.amount),p_memo:f.name,p_book:st.book,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
-    toast(`${f.name} ${won(f.amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await load();toast('취소했습니다',[],1500)}]],4000);
+    const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:amount,p_memo:f.name,p_book:st.book,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
+    if(!Number(f.amount)){st.amount='';renderAmount()}
+    toast(`${f.name} ${won(amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await load();toast('취소했습니다',[],1500)}]],4000);
     await load();
   }catch(x){toast('저장 안 됨. 인터넷을 확인하고 다시 눌러 주세요. ('+x.message+')',[],8000)}
   st.busy=false;
