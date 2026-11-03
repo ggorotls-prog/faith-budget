@@ -18,15 +18,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: 이번 빌드용 서명 열쇠 만들기
+      # 서명 열쇠는 GitHub Secrets에서(업무·영성 기록 앱과 같은 방식, 2026-11-03 룡: 모든 기록 앱 동일).
+      # KEYSTORE_B64 = p12 파일을 base64로, KEYSTORE_PASSWORD = 그 비밀번호, KEY_ALIAS = 열쇠 이름(없으면 budgetapp)
+      - name: 서명 열쇠 꺼내기
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
-          PW=$(openssl rand -hex 24)
-          echo "::add-mask::$PW"
-          keytool -genkeypair -alias budgetapp -keyalg RSA -keysize 2048 -validity 10950 -dname "CN=faith-budget" \
-            -storetype pkcs12 -keystore "$RUNNER_TEMP/budget.p12" -storepass "$PW" -keypass "$PW"
+          if [ -z "$KEYSTORE_B64" ]; then echo "GitHub Secrets에 KEYSTORE_B64가 없어요"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/budget.p12"
           echo "KEYSTORE_FILE=$RUNNER_TEMP/budget.p12" >> "$GITHUB_ENV"
-          echo "KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
       - name: APK 만들기
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: gradle -p android assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:
@@ -64,6 +68,7 @@ jobs:
             echo "앱이 켜져 있어요"
 
   # main에서 가상 폰 확인까지 통과하면 APK를 사이트 app/에 올린다. 가족은 이 주소에서 받아 깐다.
+  # 폰의 앱이 app/version.json을 보고 새 버전이면 스스로 받아서 업데이트한다(업무·영성 기록 앱과 같음).
   publish:
     needs: smoke
     if: github.ref == 'refs/heads/main'
@@ -80,6 +85,8 @@ jobs:
         run: |
           mkdir -p app
           cp dist/app-release.apk app/faith-budget.apk
+          SHA=$(sha256sum app/faith-budget.apk | cut -d' ' -f1)
+          printf '{"versionCode":%s,"apk":"/app/faith-budget.apk","sha256":"%s"}\n' "$GITHUB_RUN_NUMBER" "$SHA" > app/version.json
           git config user.name "faith-budget-bot"
           git config user.email "faith-budget-bot@users.noreply.github.com"
           git add -f app
