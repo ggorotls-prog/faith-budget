@@ -2,7 +2,8 @@ plugins {
     id 'com.android.application'
 }
 
-// 서명 열쇠는 빌드할 때마다 새로 만든다. 그래서 앱을 새로 빌드해 깔려면 폰에서 지우고 다시 깐다(기록은 서버에 있어 그대로).
+// 서명 열쇠는 GitHub Secrets에서 받는다(코드에 넣지 않음). 모든 기록 앱이 같은 방식(2026-11-03 룡 결정): 열쇠가 하나로 고정돼야
+// 앱이 스스로 업데이트할 수 있다. 열쇠가 바뀌면 그때 한 번만 폰에서 지우고 다시 깐다(기록은 서버에 있어 그대로).
 def ks = System.getenv('KEYSTORE_FILE')
 
 android {
@@ -17,13 +18,17 @@ android {
         versionName "1.${System.getenv('GITHUB_RUN_NUMBER') ?: '0'}"
     }
 
+    buildFeatures {
+        buildConfig true   // Updater가 BuildConfig.VERSION_CODE로 새 버전을 비교한다
+    }
+
     signingConfigs {
         release {
             if (ks) {
                 storeFile file(ks)
                 storeType 'pkcs12'
                 storePassword System.getenv('KEYSTORE_PASSWORD')
-                keyAlias 'budgetapp'
+                keyAlias System.getenv('KEY_ALIAS') ?: 'budgetapp'
                 keyPassword System.getenv('KEYSTORE_PASSWORD')
             }
         }
