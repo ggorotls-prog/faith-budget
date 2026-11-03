@@ -121,7 +121,9 @@ nav button.on{color:var(--main)}
 .chip.more{background:var(--bg);color:var(--sub);border-style:dashed}
 /* 빠른 기록 창(?quick=1): 위젯·One hand에서 여는 작은 창. 기록 화면만, 저장하면 닫힌다 */
 .quick #barTop,.quick #nav{display:none!important}
-.quick #v-rec{border-radius:16px 16px 0 0;background:var(--bg)}
+.quick html,.quick body,html.quick,html.quick body{background:transparent}
+.quick #v-rec{border-radius:18px;background:var(--bg);overflow:hidden}
+.quick #auth{background:var(--bg);border-radius:18px}
 .quick #books{margin-left:0;margin-right:8px}
 .quick .date{margin-left:auto}
 /* 빠른 창 버튼식 */
@@ -207,7 +209,7 @@ let token=store.get(),me=null;
 const st={kind:'지출',date:today(),amount:'',busy:false,month:today().slice(0,7)+'-01',data:null,open:{},book:null,fxOpen:null,more:false};
 // 빠른 기록 창(위젯·One hand): ?quick=1&kind=수입. 저장하면 앱 창이 닫힌다 (2026-11-03 룡: 위젯 필수, One hand는 만들어 두기)
 const Q=new URLSearchParams(location.search);const QUICK=Q.get('quick')==='1';
-if(QUICK){document.body.classList.add('quick');if(Q.get('kind')==='수입')st.kind='수입'}
+if(QUICK){document.body.classList.add('quick');document.documentElement.classList.add('quick');if(Q.get('kind')==='수입')st.kind='수입'}
 const closeQuick=()=>{try{if(window.Android&&Android.close)Android.close();else window.close()}catch(e){}};
 // 가정 장부에서 매일 쓰는 항목(칩에 바로 보임). 나머지는 「그 밖에…」와 「이번 달 고정 지출」로 (2026-11-03 Claude 제안, 룡 확인 전)
 const DAILY_MID=['식비','아침식비','교통비','생필품','기타지출','교육비'],DAILY_FAM=['의료비','의류/미용비','아이들유지비','간식비'];
