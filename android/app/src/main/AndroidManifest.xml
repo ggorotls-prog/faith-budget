@@ -21,5 +21,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 빠른 기록 창(위젯·One hand). exported라 One hand 제스처에서 바로 열 수 있다 -->
+        <activity
+            android:name=".QuickActivity"
+            android:exported="true"
+            android:label="빠른 기록"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Quick" />
+
+        <receiver android:name=".QuickWidget" android:exported="false" android:label="재정 기록">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" />
+        </receiver>
     </application>
 </manifest>
