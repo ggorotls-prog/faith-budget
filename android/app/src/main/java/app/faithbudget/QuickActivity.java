@@ -26,20 +26,22 @@ public class QuickActivity extends Activity {
         super.onCreate(saved);
         FrameLayout root = new FrameLayout(this);
         WebView web = new WebView(this);
-        web.setBackgroundColor(Color.parseColor("#f4f5f2"));
+        web.setBackgroundColor(Color.TRANSPARENT);   // 사이트가 둥근 카드를 그리고 바깥은 비친다
         web.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         root.addView(web);
         setContentView(root);
 
-        // 아래에 붙는 창, 화면 높이의 3/4. 키패드·칩이 다 보이는 크기
-        int h = Math.round(getResources().getDisplayMetrics().heightPixels * 0.78f);
-        getWindow().setLayout(WindowManager.LayoutParams.MATCH_PARENT, h);
-        getWindow().setGravity(Gravity.BOTTOM);
+        // 화면 가운데 둥근 카드(2026-11-03 룡: 위젯 밑이 아니라 가운데). 높이는 화면의 7/10, 키패드까지 보이는 크기
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int w = Math.round(dm.widthPixels * 0.94f), h = Math.round(dm.heightPixels * 0.70f);
+        getWindow().setLayout(w, h);
+        getWindow().setGravity(Gravity.CENTER);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);   // 로그인·장부 기억은 본 앱과 같은 저장소를 쓴다
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);   // 사이트를 고치면 바로 새 화면(지출 창만 옛 화면이 남던 일, 2026-11-03)
         web.addJavascriptInterface(new Bridge(), "Android");
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -51,7 +53,7 @@ public class QuickActivity extends Activity {
         });
 
         String kind = getIntent().getStringExtra(EXTRA_KIND);
-        String url = MainActivity.BASE + "?quick=1" + ("수입".equals(kind) ? "&kind=%EC%88%98%EC%9E%85" : "");
+        String url = MainActivity.BASE + "?quick=1" + ("수입".equals(kind) ? "&kind=%EC%88%98%EC%9E%85" : "") + "&t=" + System.currentTimeMillis();
         web.loadUrl(url);
 
         // One hand 제스처에서 손가락을 뗄 때 바깥 누름으로 잡혀 바로 닫히지 않게(업무 기록 앱과 같음)
