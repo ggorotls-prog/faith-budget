@@ -107,12 +107,23 @@ nav button.on{color:var(--main)}
 .btns .ok{background:var(--main);color:#fff}
 .btns .del{color:var(--bad)}
 #msg{padding:40px 24px;text-align:center;color:var(--sub)}
+/* 장부 고르기(가정|기업)와 기업 고정 경비 */
+#books{margin-left:8px}
+#books button{padding:6px 12px}
+.fx{margin:0 12px 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.fx>h4{margin:0;padding:9px 12px;font-size:14px;display:flex;justify-content:space-between;cursor:pointer}
+.fx>h4 small{color:var(--sub);font-weight:500}
+.fx .fr{display:flex;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid var(--line);font-size:14px}
+.fx .fr span{flex:1}.fx .fr em{font-style:normal;color:var(--sub);font-size:12px}
+.fx .fr button{background:var(--main);color:#fff;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:700}
+.fx .fr.ok{color:var(--sub)}.fx .fr.ok b{font-weight:500}
+.pl .ln .t b{font-weight:700}.pl .ln .t .neg{color:var(--bad)}
 </style>
 </head>
 <body>
 <div id="msg">불러오는 중…</div>
 <div id="auth" hidden></div>
-<div class="bar-top" id="barTop" hidden><strong>재정 기록</strong><button id="menuBtn" aria-label="내 계정"><span id="myName"></span> ☰</button></div>
+<div class="bar-top" id="barTop" hidden><strong>재정 기록</strong><div class="seg" id="books" hidden></div><button id="menuBtn" style="margin-left:auto" aria-label="내 계정"><span id="myName"></span> ☰</button></div>
 <div class="am-bg" id="amBg" role="dialog" aria-modal="true" aria-labelledby="amName" hidden>
   <div class="am">
     <div class="am-head"><strong id="amName"></strong><button type="button" class="am-x" id="amClose" aria-label="닫기">✕</button></div>
@@ -142,13 +153,14 @@ nav button.on{color:var(--main)}
   </div>
   <div id="amt" class="amount zero">0원</div>
   <input id="memo" class="memo" placeholder="메모 (안 써도 됩니다)" autocomplete="off">
+  <div id="fixed" class="fx" hidden></div>
   <div id="chips" class="chips"></div>
   <div class="keys" id="keys"></div>
 </main>
 <main id="v-list"><div class="month" data-m></div><div id="list" class="scroll"></div></main>
 <main id="v-bud"><div class="month" data-m></div><div id="bud" class="scroll"></div></main>
 <nav id="nav" hidden>
-  <button data-v="rec" class="on">기록</button><button data-v="list">내역</button><button data-v="bud">예산안</button>
+  <button data-v="rec" class="on">기록</button><button data-v="list">내역</button><button data-v="bud" id="nav3">예산안</button>
 </nav>
 <div id="toast"></div>
 <div id="dlg"><form id="form"></form></div>
@@ -167,7 +179,9 @@ const TITHE=['근로소득','미지정공급','사업소득'];   // 기록 뒤 �
 const store={get(){try{return localStorage.getItem('fin_session')}catch(e){return null}},set(t){try{localStorage.setItem('fin_session',t)}catch(e){}},del(){try{localStorage.removeItem('fin_session');localStorage.removeItem('fin_token')}catch(e){}}};
 let token=store.get(),me=null;
 
-const st={kind:'지출',date:today(),amount:'',busy:false,month:today().slice(0,7)+'-01',data:null,open:{}};
+const st={kind:'지출',date:today(),amount:'',busy:false,month:today().slice(0,7)+'-01',data:null,open:{},book:null,fxOpen:true};
+// 장부: 가정은 예전 그대로, 기업은 영역(청소·포멘토·그린주의·오레진)별 손익 + 공통 경비 (2026-11-03 룡 기준)
+const isCo=()=>st.data&&st.data.book==='기업';
 
 async function rpc(fn,args){
   const r=await fetch(API+fn,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_token:token,...args})});
@@ -177,7 +191,7 @@ async function rpc(fn,args){
     throw new Error(m)}
   return t?JSON.parse(t):null;
 }
-async function load(){st.data=await rpc('fin_load',{p_month:st.month});render()}
+async function load(){st.data=await rpc('fin_load',{p_month:st.month,p_book:st.book});render()}
 const items=()=>st.data.items;
 const item=id=>items().find(i=>i.id===id);
 const label=i=>i.detail||i.middle;
@@ -210,23 +224,46 @@ function renderChips(){
   let h='';
   if(st.kind==='지출'){
     const fav=[...leaf].filter(i=>count(i)>0).sort((a,b)=>count(b)-count(a)).slice(0,9);
-    if(fav.length)h+=`<h4>자주 쓰는 것</h4><div class="row">${fav.map(i=>chip(i,name(i),1)).join('')}</div>`;
+    if(fav.length)h+=`<h4>자주 쓰는 것</h4><div class="row">${fav.map(i=>chip(i,(i.area?i.area+' ':'')+name(i),1)).join('')}</div>`;
   }
   const groups=[];
-  leaf.forEach(i=>{const k=st.kind==='수입'?'수입':(i.detail&&!isWeek(i)?i.middle:i.bucket);let g=groups.find(x=>x.k===k);if(!g)groups.push(g={k,a:[]});g.a.push(i)});
+  // 기업: 영역 이름 아래 매출·재료비·인건비, 그다음 공통 경비는 분류별
+  leaf.forEach(i=>{const k=isCo()?(i.area||(st.kind==='수입'?'기타 수입':i.bucket)):(st.kind==='수입'?'수입':(i.detail&&!isWeek(i)?i.middle:i.bucket));let g=groups.find(x=>x.k===k);if(!g)groups.push(g={k,a:[]});g.a.push(i)});
   h+=groups.map(g=>`<h4>${esc(g.k)}</h4><div class="row">${g.a.map(i=>chip(i,name(i),st.kind==='수입')).join('')}</div>`).join('');
   $('#chips').innerHTML=h;
   $('#chips').parentElement.classList.toggle('in',st.kind==='수입');
+  renderFixed();
 }
+/* 기업 고정 경비: 예산안 「월 고정지출」대로 미리 깔려 있고 「냈어요」 한 번이면 기록된다 */
+function renderFixed(){
+  const el=$('#fixed');const fx=isCo()&&st.kind==='지출'?st.data.fixed:[];
+  el.hidden=!fx.length;if(!fx.length)return;
+  const done=fx.filter(f=>f.paid).length;
+  el.innerHTML=`<h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 경비</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+Number(f.amount),0))}</small></h4>`+
+   (st.fxOpen?fx.map(f=>`<div class="fr${f.paid?' ok':''}"><span>${esc(f.name)} <em>${f.day?f.day+'일':''}</em></span><b>${won(f.amount)}</b>${f.paid?'<em>냈음</em>':`<button data-f="${f.id}">냈어요</button>`}</div>`).join(''):'');
+}
+$('#fixed').onclick=async e=>{
+  if(e.target.closest('[data-t]')){st.fxOpen=!st.fxOpen;renderFixed();return}
+  const id=e.target.dataset.f;if(!id||st.busy)return;
+  const f=st.data.fixed.find(x=>x.id===id);st.busy=true;
+  try{
+    // 보는 달이 이번 달이면 오늘, 지난달이면 그 달의 납부일로
+    const date=st.month.slice(0,7)===today().slice(0,7)?today():st.month.slice(0,8)+pad(f.day||1);
+    const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:Number(f.amount),p_memo:f.name,p_book:st.book,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
+    toast(`${f.name} ${won(f.amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await load();toast('취소했습니다',[],1500)}]],4000);
+    await load();
+  }catch(x){toast('저장 안 됨. 인터넷을 확인하고 다시 눌러 주세요. ('+x.message+')',[],8000)}
+  st.busy=false;
+};
 async function save(i){
   if(st.busy)return;
   if(!st.amount){const a=$('#amt');a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake');toast('금액을 먼저 눌러 주세요',[],1500);return}
   st.busy=true;
   const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date;
   try{
-    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo});
+    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:st.book});
     st.amount='';$('#memo').value='';renderAmount();
-    const name=isWeek(i)?'식비':label(i);
+    const name=isWeek(i)?'식비':(i.area?i.area+' ':'')+label(i);
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await load();toast('취소했습니다',[],1500)}]];
     if(i.kind==='수입'&&TITHE.includes(i.middle)){
       const t=Math.ceil(amount/10),ti=items().find(x=>x.middle==='십일조(10%)');
@@ -265,14 +302,16 @@ function renderList(){
     const dt=new Date(d+'T00:00');
     return `<div class="day">${dt.getMonth()+1}/${dt.getDate()} (${'일월화수목금토'[dt.getDay()]})</div>`+by[d].map(e=>{
       const i=item(e.item_id)||{};const inc=i.kind==='수입';
-      return `<button class="ent" data-e="${e.id}"><span>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}<small>${esc(e.memo)}</small></span><b class="${inc?'inc':''}">${inc?'+':''}${won(e.amount)}</b></button>`}).join('');
+      const nm=i.area?i.area+' '+i.middle:(i.detail?i.middle+' · '+i.detail:i.middle);
+      const sub=isCo()?[e.memo,e.by].filter(Boolean).join(' · '):e.memo;   // 기업은 누가 적었는지도
+      return `<button class="ent" data-e="${e.id}"><span>${esc(nm)}<small>${esc(sub)}</small></span><b class="${inc?'inc':''}">${inc?'+':''}${won(e.amount)}</b></button>`}).join('');
   }).join(''):'<p style="text-align:center;color:var(--sub);padding:32px">이 달 기록이 없습니다</p>';
 }
 $('#list').onclick=e=>{const b=e.target.closest('[data-e]');if(b)editEntry(st.data.entries.find(x=>x.id===b.dataset.e))};
 function closeDlg(){$('#dlg').classList.remove('on')}
 $('#dlg').onclick=e=>{if(e.target.id==='dlg')closeDlg()};
 function editEntry(en){
-  const groups={};items().forEach(i=>(groups[i.kind+' · '+i.bucket]=groups[i.kind+' · '+i.bucket]||[]).push(i));
+  const groups={};items().forEach(i=>{const k=i.kind+' · '+(i.area||i.bucket);(groups[k]=groups[k]||[]).push(i)});
   $('#form').innerHTML=`<label>금액<input id="f-a" inputmode="numeric" value="${en.amount}"></label>
    <label>날짜<input id="f-d" type="date" value="${en.date}"></label>
    <label>항목<select id="f-i">${Object.entries(groups).map(([k,a])=>`<optgroup label="${esc(k)}">${a.map(i=>`<option value="${i.id}"${i.id===en.item_id?' selected':''}>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}</option>`).join('')}</optgroup>`).join('')}</select></label>
@@ -291,7 +330,30 @@ function budgetOf(i,base){
   if(i.rate)return Math.round(base/0.87*Number(i.rate)/100)*100;
   return Number(st.data.budgets[i.id]||0);
 }
+/* 기업 손익: 영역마다 매출 − 재료비 − 인건비 = 이익, 공통 경비는 따로, 전체 = 영역 이익 합 − 공통 경비 */
+function renderProfit(){
+  const act={};st.data.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
+  const sum=f=>items().filter(f).reduce((s,i)=>s+(act[i.id]||0),0);
+  const areas=[...new Set(items().filter(i=>i.area).map(i=>i.area))];
+  const sales=sum(i=>i.kind==='수입'),cost=sum(i=>i.kind==='지출'&&i.area),common=sum(i=>i.kind==='지출'&&!i.area);
+  const row=(name,v,sub='')=>`<div class="ln"><div class="t"><span>${esc(name)}</span><b class="${v<0?'neg':''}">${won(v)}</b></div>${sub?`<div class="t"><em>${sub}</em></div>`:''}</div>`;
+  let h=`<div class="sum pl">
+    <div class="tile"><small>총 매출</small><b>${won(sales)}</b></div>
+    <div class="tile"><small>총 비용 (영역+공통)</small><b>${won(cost+common)}</b></div>
+    <div class="tile wide"><small>기업 전체 이익</small><b class="${sales-cost-common<0?'neg':''}">${won(sales-cost-common)}</b></div></div>`;
+  h+=`<div class="bk pl"><h3>영역별 이익<small>매출 − 재료비 − 인건비</small></h3>`;
+  areas.forEach(a=>{const s=sum(i=>i.area===a&&i.kind==='수입'),c=sum(i=>i.area===a&&i.kind==='지출');
+    h+=row(a,s-c,`매출 ${won(s)} · 비용 ${won(c)}`)});
+  h+='</div>';
+  h+=`<div class="bk pl"><h3>공통 경비<small>${won(common)}</small></h3>`;
+  [...new Set(items().filter(i=>i.kind==='지출'&&!i.area).map(i=>i.bucket))].forEach(bk=>{const v=sum(i=>i.kind==='지출'&&!i.area&&i.bucket===bk);if(v)h+=row(bk,v)});
+  const unpaid=(st.data.fixed||[]).filter(f=>!f.paid);
+  if(unpaid.length)h+=row('아직 안 낸 고정 경비 '+unpaid.length+'건',unpaid.reduce((s,f)=>s+Number(f.amount),0));
+  h+='</div>';
+  $('#bud').innerHTML=h;
+}
 function renderBudget(){
+  if(isCo()){renderProfit();return}
   const it=items().filter(i=>i.kind==='지출');
   const base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(st.data.budgets[i.id]||0),0);
   const act={};st.data.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
@@ -331,11 +393,17 @@ function editBudget(i){
   $('#form').innerHTML=`<label>${esc(i.detail||i.middle)} 예산 (${Number(st.month.slice(5,7))}월)<input id="f-b" inputmode="numeric" value="${st.data.budgets[i.id]||0}"></label>
    <div class="btns"><button type="button" id="f-c">닫기</button><button class="ok">저장</button></div>`;
   $('#f-c').onclick=closeDlg;
-  $('#form').onsubmit=async e=>{e.preventDefault();await rpc('fin_set_budget',{p_month:st.month,p_item:i.id,p_amount:Number($('#f-b').value.replace(/\D/g,''))||0});closeDlg();await load()};
+  $('#form').onsubmit=async e=>{e.preventDefault();await rpc('fin_set_budget',{p_month:st.month,p_item:i.id,p_amount:Number($('#f-b').value.replace(/\D/g,''))||0,p_book:st.book});closeDlg();await load()};
   $('#dlg').classList.add('on');
 }
 
-function render(){renderDate();renderAmount();renderChips();renderMonth();renderList();renderBudget()}
+function render(){renderDate();renderAmount();renderChips();renderMonth();renderList();renderBudget();$('#nav3').textContent=isCo()?'손익':'예산안'}
+/* 장부 고르기: 두 장부가 있을 때만 보인다. 마지막에 본 장부를 기억한다 */
+function renderBooks(){
+  const bs=me.books||[];const el=$('#books');el.hidden=bs.length<2;
+  el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
+}
+$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.amount='';await load();show('rec')};
 function show(v){
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
@@ -350,7 +418,10 @@ window.addEventListener('unhandledrejection',e=>toast('문제가 생겼습니다
   catch(e){if(token){$('#msg').hidden=false;$('#msg').textContent='열지 못했습니다: '+e.message}}
 })();
 async function enter(){
-  me=await rpc('fin_me',{});await load();
+  me=await rpc('fin_me',{});
+  const bs=me.books||[];let saved=null;try{saved=localStorage.getItem('fin_book')}catch(x){}
+  st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
+  renderBooks();await load();
   $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;show('rec');
   if(me.must_change_pw)forcePw();
 }
