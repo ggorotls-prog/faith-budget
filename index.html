@@ -110,13 +110,13 @@ nav button.on{color:var(--main)}
 /* 장부 고르기(가정|기업)와 기업 고정 경비 */
 #books{margin-left:10px;padding:4px;border-radius:12px}
 #books button{padding:9px 22px;font-size:17px;border-radius:9px}   /* 장부 고르기 크게(2026-11-06 룡) */
-/* 앱 기록 = 왼쪽 아래 ＋ 수입 / − 지출 버튼(2026-11-06 룡). 누르면 기록 화면, 저장·✕면 돌아온다 */
-#fab{position:fixed;left:16px;bottom:calc(68px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:5}
+/* 앱 기록 = 오른쪽 아래 위 ＋ 수입 / 아래 − 지출 버튼(2026-11-06 룡). 누르면 기록 화면, 저장·✕면 돌아온다 */
+#fab{position:fixed;right:16px;bottom:calc(68px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;z-index:5}
 #fab button{width:58px;height:58px;border-radius:50%;color:#fff;font-size:30px;font-weight:700;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.22)}
 #fab #fabIn{background:#1B62B5}#fab #fabOut{background:#1F6F54}
 #recClose{font-size:20px;color:var(--sub);padding:6px 10px}
-.pc #fab{bottom:24px;left:24px}
-#v-list .scroll,#v-bud .scroll{padding-bottom:90px}
+.pc #fab{bottom:24px;right:24px}
+#v-list .scroll,#v-bud .scroll{padding-bottom:150px}
 .fx{margin:0 12px 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .fx>h4{margin:0;padding:9px 12px;font-size:14px;display:flex;justify-content:space-between;cursor:pointer}
 .fx>h4 small{color:var(--sub);font-weight:500}
