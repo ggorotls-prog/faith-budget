@@ -392,7 +392,6 @@ function renderFlow(){
   if(step==='amount')renderAmount();
   if(step==='memo'){
     const fs=F.item?fundsOf(F.item):[];
-    if(fs.length===1&&F.fund===undefined)F.fund=fs[0].id;
     $('#fundPick').innerHTML=fs.length?`<h5 style="margin:6px 12px 4px">어디에 낸 돈?</h5><div class="row" style="padding:0 12px 8px">${fs.map(f=>`<button class="chip${F.fund===f.id?' fav':''}" data-fund="${f.id}">${esc(f.name)}</button>`).join('')}<button class="chip${!F.fund?' fav':''}" data-fund="">해당 없음</button></div>`:'';
     if(!fs.length)setTimeout(()=>$('#memo').focus(),50);
   }
@@ -489,7 +488,7 @@ function fxAmount(f,d){
   if(Number(f.amount))return Number(f.amount);
   if(d.book==='기업')return 0;
   const i=d.items.find(x=>x.id===f.item_id);if(!i)return 0;
-  const it=d.items.filter(x=>x.kind==='지출'),base=it.filter(x=>!x.rate).reduce((s,x)=>s+Number(d.budgets[x.id]||0),0);
+  const it=d.items.filter(x=>x.kind==='지출'),base=baseOf(d);
   return budgetOf(i,base,d);
 }
 const fixedOf=d=>d?(d.fixed||[]).map(f=>({...f,amt:fxAmount(f,d),bk:bkId(d.book)})).sort((a,b)=>(a.day||99)-(b.day||99)):[];
@@ -636,6 +635,8 @@ function editEntry(en){
 }
 
 /* 예산안 (시트와 같은 계산) */
+// 십일조·봉헌물·이웃 나눔 예산의 기준 = 비율 항목을 뺀 모든 지출 예산 합(시트 예산안 G8 수식과 같음, 사역비·교육비·빚은 이달 계획 합)
+const baseOf=d=>d.items.filter(i=>i.kind==='지출'&&!i.rate).reduce((t,i)=>t+budgetOf(i,0,d),0);
 function budgetOf(i,base,d=st.data){
   const fs=(d.funds||[]).filter(f=>f.item_id===i.id);if(fs.length)return fs.reduce((t,f)=>t+Number(f.monthly||0),0);   // 사역비·교육비·빚: 이달 계획의 합(시트와 같음)
   if(i.rate){const r=Number(i.rate);return Math.round(base/0.87*(r<1?r:r/100)/100)*100}
@@ -644,7 +645,7 @@ function budgetOf(i,base,d=st.data){
 // 예산 넘은 항목(가정): 실제 > 예산. 넘은 금액 큰 순
 function overOf(d){
   if(!d||d.book==='기업')return[];
-  const it=d.items.filter(i=>i.kind==='지출'),base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(d.budgets[i.id]||0),0);
+  const it=d.items.filter(i=>i.kind==='지출'),base=baseOf(d);
   const act={};d.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
   return it.map(i=>({i,b:budgetOf(i,base,d),a:act[i.id]||0})).filter(x=>x.b>0&&x.a>x.b).map(x=>({...x,over:x.a-x.b})).sort((p,q)=>q.over-p.over);
 }
@@ -696,7 +697,7 @@ function renderProfit(){
 function renderBudget(){
   if(isCo()){renderProfit();return}
   const it=items().filter(i=>i.kind==='지출');
-  const base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(st.data.budgets[i.id]||0),0);
+  const base=baseOf(st.data);
   const act={};st.data.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
   const inSum=m=>items().filter(i=>i.kind==='수입'&&(m?i.middle===m:i.middle!=='이월')).reduce((s,i)=>s+(act[i.id]||0),0);
   const income=inSum(),carry=inSum('이월');
@@ -807,7 +808,7 @@ async function renderDash(){
     h+=kpi(mLbl(month)+' 매출',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 비용',n.out,delta(n.out,p.out,true))+kpi(mLbl(month)+' 이익',n.inc-n.out,'<em>매출 − 비용</em>')
       +kpi(yr+'년 이익 (쌓인 것)',ySum(x=>x.inc-x.out),lc?`<em>오레진 수당 ${won(lc)} · 뗀 세금 ${won(t.tax)}</em>`:`<em>${yIdx.length}달 합</em>`);
   }else{
-    const it=d.items.filter(i=>i.kind==='지출'),base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(d.budgets[i.id]||0),0),plan=it.reduce((s,i)=>s+budgetOf(i,base,d),0);
+    const it=d.items.filter(i=>i.kind==='지출'),base=baseOf(d),plan=it.reduce((s,i)=>s+budgetOf(i,base,d),0);
     h+=kpi(mLbl(month)+' 수입',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 지출',n.out,delta(n.out,p.out,true))
       +kpi('잔액 (이월 포함)',n.carry+n.inc-n.out,`<em>이월 ${won(n.carry)}</em>`)+kpi('예산 대비 지출',n.out,`<em>예산 ${won(plan)} 중 ${plan?Math.round(n.out/plan*100):0}%</em>`);
   }
