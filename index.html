@@ -131,6 +131,9 @@ nav button.on{color:var(--main)}
 .fadd{display:block;width:100%;padding:10px;border-top:1px solid var(--line);color:var(--main);font-weight:700;font-size:14px}
 .fx.due{margin:8px 0 4px;border-color:#f0c9a8;background:#fff8f1}
 .fx.due>h4{color:#a5541b}
+.fx.give{margin:8px 0 4px;border-color:#bfe0d1;background:#f3faf6}
+.fx.give>h4{color:var(--main)}
+.fx .fr em{font-style:normal;color:var(--sub);font-size:12px}
 .acc{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:15px;font-weight:600;color:var(--ink);display:flex;flex-wrap:wrap;gap:6px;align-items:center;white-space:pre-wrap}
 .acc small{width:100%;font-size:12px;color:var(--sub);font-weight:500}
 .acc span{flex:1;user-select:text}
@@ -459,6 +462,35 @@ function fixedHtml(){
   return `<div class="fx"><h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 ${isCo()?'경비':'지출'}</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+f.amt,0))}</small></h4>`+
    (st.fxOpen?fx.map(fxRow).join('')+`<button class="fadd" data-fa="1">＋ 고정비 추가</button>`:'')+'</div>';
 }
+/* 드릴 것(가정, 2026-11-06 룡): 십일조·봉헌물·이웃 나눔은 수입이 들어올 때마다 바로 드린다.
+   이 달 수입(십일조 버튼을 띄우는 수입: 근로소득·미지정공급·사업소득) × 비율 − 이미 드린 것 = 남은 것. 봉헌물·이웃 나눔은 다 못 드릴 때도 있어 금액을 고쳐 드린다 */
+function giveList(d=st.data){
+  if(!d||d.book!=='가정')return[];
+  const act={};d.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
+  const inc=d.items.filter(i=>i.kind==='수입'&&TITHE.includes(i.middle)).reduce((s,i)=>s+(act[i.id]||0),0);
+  if(!inc)return[];
+  return d.items.filter(i=>i.kind==='지출'&&i.rate).map(i=>{const r=Number(i.rate)<1?Number(i.rate):Number(i.rate)/100;
+    const owe=Math.ceil(Math.round(inc*r*100)/100),paid=act[i.id]||0;return{i,inc,owe,paid,left:Math.max(0,owe-paid)}});
+}
+function giveHtml(){
+  const g=giveList();if(!g.length)return '';
+  const left=g.reduce((s,x)=>s+x.left,0);
+  return `<div class="fx give"><h4><span>🙏 드릴 것${left?'':' ✓'}</span><small>이 달 수입 ${won(g[0].inc)}</small></h4>`+g.map(x=>
+    `<div class="fr${x.left?'':' ok'}"><span>${esc(x.i.middle)}<em> ${won(x.owe)} 중 ${won(x.paid)} 드림</em></span><b>${x.left?won(x.left):'다 드림'}</b>${x.left?`<button data-give="${x.i.id}">드렸어요</button>`:''}</div>`).join('')+'</div>';
+}
+function payGive(id){
+  const x=giveList().find(v=>v.i.id===id);if(!x)return;
+  $('#form').innerHTML=`<label>${esc(x.i.middle)} 드린 금액 (남은 것 ${won(x.left)})<input id="f-p" inputmode="numeric" value="${x.left}"></label>
+   <div class="btns"><button type="button" id="f-c">닫기</button><button class="ok">드렸어요</button></div>`;
+  $('#f-c').onclick=closeDlg;
+  $('#form').onsubmit=async e=>{e.preventDefault();const v=Number($('#f-p').value.replace(/\D/g,''));if(!v||st.busy)return;closeDlg();st.busy=true;
+    try{const cur=st.month.slice(0,7)===today().slice(0,7);const last=ymd(new Date(Number(st.month.slice(0,4)),Number(st.month.slice(5,7)),0));
+      const eid=await rpc('fin_add',{p_date:cur?today():last,p_item:id,p_amount:v,p_memo:'',p_book:st.book});
+      toast(`${x.i.middle} ${won(v)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]],4000);
+      await loadAll();render()}catch(x2){toast('저장 안 됨. ('+x2.message+')',[],8000)}
+    st.busy=false};
+  $('#dlg').classList.add('on');setTimeout(()=>$('#f-p').select(),50);
+}
 // 첫 화면(내역 위): 날짜를 정했고 그날이 지났는데 안 낸 것. 지금 고른 장부 것만(2026-11-06 룡). 이번 달일 때만
 function dueHtml(){
   if(st.month.slice(0,7)!==today().slice(0,7))return '';
@@ -514,6 +546,7 @@ function editFixed(bk,id){
 }
 function fxClick(e){
   const b=e.target.closest('button');if(!b)return false;const d=b.dataset;
+  if(d.give){payGive(d.give);return true}
   if(d.f){payFixed(d.bk||st.book,d.f);return true}
   if(d.fe){editFixed(d.bk||st.book,d.fe);return true}
   if(d.fa){editFixed(st.book,null);return true}
@@ -531,7 +564,7 @@ function renderMonth(){
 function renderList(){
   const by={};st.data.entries.forEach(e=>(by[e.date]=by[e.date]||[]).push(e));
   const days=Object.keys(by);
-  $('#list').innerHTML=dueHtml()+(days.length?days.map(d=>{
+  $('#list').innerHTML=giveHtml()+dueHtml()+(days.length?days.map(d=>{
     const dt=new Date(d+'T00:00');
     return `<div class="day">${dt.getMonth()+1}/${dt.getDate()} (${'일월화수목금토'[dt.getDay()]})</div>`+by[d].map(e=>{
       const i=item(e.item_id)||{};const inc=i.kind==='수입';
@@ -574,7 +607,7 @@ function overOf(d){
 function renderAlert(){
   const el=$('#alert');if(!el)return;
   const now=st.month.slice(0,7)===today().slice(0,7);
-  const ds=Object.values(F.qd||{});
+  const ds=st.data?[st.data]:[];   // 고른 장부 것만(2026-11-06 룡)
   const over=now?ds.flatMap(overOf):[];
   const late=[];
   if(PC||QUICK||st.view==='rec'||!st.view||(!over.length&&!late.length)){el.hidden=true;return}
