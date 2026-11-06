@@ -224,6 +224,9 @@ const DAILY_MID=['식비','아침식비','교통비','생필품','기타지출',
 const isDaily=i=>DAILY_MID.includes(i.middle)||(i.middle==='가족관리비'&&DAILY_FAM.includes(i.detail));
 // 장부: 가정은 예전 그대로, 기업은 영역(청소·포멘토·그린주의·오레진)별 손익 + 공통 경비 (2026-11-03 룡 기준)
 const isCo=()=>st.data&&st.data.book==='기업';
+// 오레진 수당: 3.3%를 떼고 통장에 들어온다. 받은 돈만 누르면 세전·뗀 세금을 계산 (2026-11-05 귀룡 확인, 판매-기준.md)
+const isLC=i=>!!i&&i.area==='오레진'&&i.middle==='수당';
+const lcTax=net=>{const g=Math.round(net/0.967);return{gross:g,tax:g-net}};
 
 async function rpc(fn,args){
   const r=await fetch(API+fn,{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_token:token,...args})});
@@ -293,7 +296,7 @@ function itemButtons(){
   const sc=scopeOf(F.area);const wk=itemsOf(sc).find(i=>isWeek(i)&&i.detail===Math.ceil(Number(st.date.slice(8))/7)+'주차');
   const list=itemsOf(sc).filter(i=>!isWeek(i)||i===wk);
   const gs=[];list.forEach(i=>{const k=i.detail&&!isWeek(i)?i.middle:'';let g=gs.find(x=>x.k===k);if(!g)gs.push(g={k,a:[]});g.a.push(i)});
-  return '<h4>뭐에?</h4>'+gs.map(g=>(g.k?`<h5>${esc(g.k)}</h5>`:'')+`<div class="bb two">${g.a.map(i=>bigBtn(`data-item="${i.id}"`,isWeek(i)?'식비':(i.detail||i.middle))).join('')}</div>`).join('');
+  return '<h4>뭐에?</h4>'+gs.map(g=>(g.k?`<h5>${esc(g.k)}</h5>`:'')+`<div class="bb two">${g.a.map(i=>bigBtn(`data-item="${i.id}"`,isWeek(i)?'식비':isLC(i)?'수당 (통장에 들어온 돈)':(i.detail||i.middle))).join('')}</div>`).join('');
 }
 $('#flow').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
@@ -325,7 +328,8 @@ async function save(){
       const t=Math.ceil(amount/10),ti=(F.qd[book].items||[]).find(x=>x.middle==='십일조(10%)');
       if(ti)acts.unshift([`십일조 ${t.toLocaleString('ko-KR')}원도 기록`,async()=>{await rpc('fin_add',{p_date:date,p_item:ti.id,p_amount:t,p_memo:'',p_book:book});await loadAll();render();toast('십일조도 기록했습니다',[],1500)}]);
     }
-    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`,acts,acts.length>1?9000:4000);
+    const lc=isLC(i)?lcTax(amount):null;
+    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:''),acts,acts.length>1||lc?9000:4000);
     startFlow();
     await loadAll();render();
     if(QUICK)setTimeout(closeQuick,acts.length>1?6000:1000);   // 빠른 창은 저장하면 닫힌다
@@ -420,7 +424,8 @@ function renderProfit(){
     <div class="tile wide"><small>기업 전체 이익</small><b class="${sales-cost-common<0?'neg':''}">${won(sales-cost-common)}</b></div></div>`;
   h+=`<div class="bk pl"><h3>영역별 이익<small>매출 − 재료비 − 인건비</small></h3>`;
   areas.forEach(a=>{const s=sum(i=>i.area===a&&i.kind==='수입'),c=sum(i=>i.area===a&&i.kind==='지출');
-    h+=row(a,s-c,`매출 ${won(s)} · 비용 ${won(c)}`)});
+    const lcNet=sum(i=>i.area===a&&isLC(i)),lc=lcTax(lcNet);
+    h+=row(a,s-c,`매출 ${won(s)} · 비용 ${won(c)}`+(lcNet?`<br>수당 받은 돈 ${won(lcNet)} = 세전 ${won(lc.gross)} − 뗀 세금 3.3% ${won(lc.tax)} (5월 종소세 때 정산)`:''))});
   h+='</div>';
   h+=`<div class="bk pl"><h3>공통 경비<small>${won(common)}</small></h3>`;
   [...new Set(items().filter(i=>i.kind==='지출'&&!i.area).map(i=>i.bucket))].forEach(bk=>{const v=sum(i=>i.kind==='지출'&&!i.area&&i.bucket===bk);if(v)h+=row(bk,v)});
