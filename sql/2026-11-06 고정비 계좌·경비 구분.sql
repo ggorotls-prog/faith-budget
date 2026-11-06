@@ -87,3 +87,7 @@ grant execute on function public.fin_fixed_save(text,uuid,uuid,text,uuid,int,big
 grant execute on function public.fin_fixed_delete(text,uuid,uuid) to anon;
 
 -- 2026-11-06 룡: 고정비 설정은 장부 구성원 누구나(공통 월세를 룡이 못 고치던 것). fin_fixed_save·fin_fixed_delete에서 영역 권한 검사를 뺐다(DB에 적용됨). 냈어요 기록은 fin_add가 계속 영역 권한을 본다.
+
+-- 2026-11-06 룡: 십일조·봉헌물·이웃 나눔은 고정 금액이 아니라 수입이 들어올 때마다 낸다 → 가정 고정비에서 뺌
+update public.fin_fixed f set active=false from public.fin_items i, public.fin_books b
+where i.id=f.item_id and b.id=f.book_id and b.name='가정' and i.rate is not null and f.active;
