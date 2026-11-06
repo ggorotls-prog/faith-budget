@@ -138,6 +138,7 @@ nav button.on{color:var(--main)}
 .bb button{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 12px;font-size:17px;font-weight:700;text-align:center;min-height:58px}
 .bb button:active{background:var(--soft)}
 .bb button.wide{grid-column:1/-1}
+.bb button.off{color:#b5bbb6;background:var(--bg)}.bb button.off small{display:block;font-size:12px;font-weight:500}
 .bb button.fav{background:var(--soft);border-color:#bfe0d1}
 .bb button.more{background:var(--bg);color:var(--sub);border-style:dashed;font-weight:600}
 #pay{display:flex;flex-direction:column;flex:1;min-height:0}
@@ -314,7 +315,7 @@ const coScopes=()=>scopes().filter(s=>bookName(s.book)==='기업'&&itemsOf(s).le
 function startFlow(){F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
-  if(!F.bk){const bs=myBooks();if(bs.length===1){F.bk=bs[0];F.bkAuto=true}else return}
+  if(!F.bk)return;   // 가정|기업은 늘 묻는다(2026-11-06 룡)
   if(!F.area){
     if(F.bk==='가정')F.area='가정';
     else{const cs=coScopes();if(cs.length===1){F.area=cs[0].name;F.areaAuto=true}else return}
@@ -351,7 +352,7 @@ function renderFlow(){
   $('#crumb').textContent=crumb.join(' › ');
   let h='';
   if(step==='none')h=`<p class="none">기록은 결제권이 있는 사람만 해요. 내역·손익은 볼 수 있어요.</p>`;
-  else if(step==='book')h=`<h4>어디 돈?</h4><div class="bb two">${myBooks().map(b=>bigBtn(`data-bk="${esc(b)}"`,b)).join('')}</div>`;
+  else if(step==='book'){const ok=myBooks();h=`<h4>어디 돈?</h4><div class="bb two">${['가정','기업'].map(b=>ok.includes(b)?bigBtn(`data-bk="${esc(b)}"`,b):`<button class="off" data-no="${b}">${b}<small>결제권 없음</small></button>`).join('')}</div>`}
   else if(step==='area')h=`<h4>기업 어느 영역?</h4><div class="bb two">${coScopes().map(s=>bigBtn(`data-area="${esc(s.name)}"`,s.name)).join('')}</div>`;
   else if(step==='pick'){const r=resolve();
     const title={bucket:'대분류',middle:'중분류',detail:'소분류'}[r.lv];
@@ -365,6 +366,7 @@ function renderFlow(){
 }
 $('#flow').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.no){toast(d.no+' 장부는 결제권이 있는 사람만 기록해요',[],2500);return}
   if(d.bk!==undefined){F.bk=d.bk;F.bkAuto=false;renderFlow();return}
   if(d.area!==undefined){F.area=d.area;F.areaAuto=false;renderFlow();return}
   if(d.v!==undefined){F.path.push({v:d.v,auto:false});renderFlow();return}
