@@ -147,3 +147,24 @@ end $$;
 
 -- 확인
 select (select count(*) from public.fin_items where area<>'') 영역항목, (select count(*) from public.fin_fixed) 고정경비, (select count(*) from public.fin_book_members) 구성원줄;
+
+-- 2026-11-04 사람별 기록 영역(결제권). 기록은 자기 영역만, 보기는 모두 (룡: 아내 가정·오레진·기업 공통, 룡 청소·포멘토·그린주의)
+create table if not exists public.fin_scopes (
+  work_member_id uuid not null references public.work_members(id),
+  book_id uuid not null references public.fin_books(id),
+  area text not null default '',
+  primary key (work_member_id, book_id, area)
+);
+alter table public.fin_scopes enable row level security;
+insert into public.fin_scopes(work_member_id, book_id, area)
+select m.id, b.id, v.area from (values
+  ('예쁜영이','가정',''),('예쁜영이','기업','오레진'),('예쁜영이','기업',''),
+  ('깐깐룡이','기업','청소'),('깐깐룡이','기업','포멘토'),('깐깐룡이','기업','그린주의')) v(nick,book,area)
+join public.work_members m on m.login_id=v.nick join public.fin_books b on b.name=v.book
+on conflict do nothing;
+-- fin_me는 scopes를 함께 돌려주고, fin_add는 그 영역에 권한이 있을 때만 넣는다(실제 함수는 DB에 적용됨).
+
+-- 2026-11-06 오레진 수당(3.3% 떼고 받음). 화면이 받은 돈으로 세전·뗀 세금을 계산한다
+insert into public.fin_items(book_id, kind, bucket, middle, detail, sort, active, area)
+select b.id,'수입','사업소득','수당','',39,true,'오레진' from public.fin_books b where b.name='기업'
+on conflict do nothing;
