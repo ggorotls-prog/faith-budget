@@ -108,8 +108,15 @@ nav button.on{color:var(--main)}
 .btns .del{color:var(--bad)}
 #msg{padding:40px 24px;text-align:center;color:var(--sub)}
 /* 장부 고르기(가정|기업)와 기업 고정 경비 */
-#books{margin-left:8px}
-#books button{padding:6px 12px}
+#books{margin-left:10px;padding:4px;border-radius:12px}
+#books button{padding:9px 22px;font-size:17px;border-radius:9px}   /* 장부 고르기 크게(2026-11-06 룡) */
+/* 앱 기록 = 왼쪽 아래 ＋ 수입 / − 지출 버튼(2026-11-06 룡). 누르면 기록 화면, 저장·✕면 돌아온다 */
+#fab{position:fixed;left:16px;bottom:calc(68px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:5}
+#fab button{width:58px;height:58px;border-radius:50%;color:#fff;font-size:30px;font-weight:700;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.22)}
+#fab #fabIn{background:#1B62B5}#fab #fabOut{background:#1F6F54}
+#recClose{font-size:20px;color:var(--sub);padding:6px 10px}
+.pc #fab{bottom:24px;left:24px}
+#v-list .scroll,#v-bud .scroll{padding-bottom:90px}
 .fx{margin:0 12px 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .fx>h4{margin:0;padding:9px 12px;font-size:14px;display:flex;justify-content:space-between;cursor:pointer}
 .fx>h4 small{color:var(--sub);font-weight:500}
@@ -212,13 +219,13 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
     </form>
   </div>
 </div>
+<button id="alert" hidden></button>
 <main id="v-dash"><div class="month" data-m></div><div id="dash" class="scroll"></div></main>
 <main id="v-rec">
   <div class="top">
-    <div class="seg" id="kindSeg"><button id="k-in" class="in">수입</button><button id="k-out" class="on">지출</button></div>
+    <button id="recClose" aria-label="닫기">✕</button><div class="seg" id="kindSeg"><button id="k-in" class="in">수입</button><button id="k-out" class="on">지출</button></div>
     <label class="date"><span id="dateLbl"></span><input type="date" id="date" aria-label="날짜"></label>
   </div>
-  <button id="alert" hidden></button>
   <div class="fh"><button id="back" aria-label="뒤로" hidden>‹</button><div id="crumb"></div></div>
   <div id="flow" class="scroll"></div>
   <div id="pay" hidden>
@@ -233,8 +240,9 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
 </main>
 <main id="v-list"><div class="month" data-m></div><div id="list" class="scroll"></div></main>
 <main id="v-bud"><div class="month" data-m></div><div id="bud" class="scroll"></div></main>
+<div id="fab" hidden><button id="fabIn" aria-label="수입 기록">＋</button><button id="fabOut" aria-label="지출 기록">−</button></div>
 <nav id="nav" hidden>
-  <button data-v="dash">대시보드</button><button data-v="rec" class="on">기록</button><button data-v="list">내역</button><button data-v="bud" id="nav3">예산안</button>
+  <button data-v="dash">대시보드</button><button data-v="list">내역</button><button data-v="bud" id="nav3">예산안</button>
 </nav>
 <div id="toast"></div>
 <div id="dlg"><form id="form"></form></div>
@@ -415,7 +423,7 @@ async function save(){
     toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:''),acts,acts.length>1||lc?9000:4000);
     startFlow();
     await loadAll();render();
-    if(QUICK)setTimeout(closeQuick,acts.length>1?6000:1000);   // 빠른 창은 저장하면 닫힌다
+    if(QUICK)setTimeout(closeQuick,acts.length>1?6000:1000);else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
   }catch(e){toast('저장 안 됨. ('+e.message+')',[],8000)}
   st.busy=false;
 }
@@ -508,7 +516,7 @@ function renderAlert(){
   const ds=Object.values(F.qd||{});
   const over=now?ds.flatMap(overOf):[];
   const late=now?ds.filter(d=>d.book==='기업').flatMap(d=>(d.fixed||[]).filter(f=>!f.paid&&f.day&&f.day<=Number(today().slice(8)))):[];
-  if(PC||QUICK||stepOf()!=='amount'||(!over.length&&!late.length)){el.hidden=true;return}
+  if(PC||QUICK||st.view==='rec'||!st.view||(!over.length&&!late.length)){el.hidden=true;return}
   const lines=[];
   if(over.length)lines.push('⚠ 예산 넘음: '+over.slice(0,3).map(x=>esc(itemName(x.i))+' +'+won(x.over)).join(', ')+(over.length>3?` 외 ${over.length-3}`:''));
   if(late.length)lines.push('⏰ 안 낸 고정 경비 '+late.length+'건: '+late.slice(0,3).map(f=>esc(f.name)).join(', '));
@@ -683,11 +691,17 @@ function renderBooks(){
   const bs=me.books||[];const el=$('#books');el.hidden=bs.length<2;
   el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
 }
-$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;F.bk=null;F.area=null;F.path=[];F.item=null;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(QUICK?'rec':PC?'dash':'list')};
+$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;F.bk=null;F.area=null;F.path=[];F.item=null;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(st.view==='rec'?'rec':PC?'dash':'list')};
 function show(v){
+  if(v!=='rec')st.back=v;st.view=v;
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
+  if(!QUICK&&me){$('#fab').hidden=v==='rec';$('#nav').hidden=v==='rec';$('#recClose').hidden=v!=='rec'}
+  renderAlert();
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
 }
+const openRec=k=>{setKind(k);show('rec')};
+const closeRec=()=>{startFlow();show(st.back||(PC?'dash':'list'))};
+$('#fabIn').onclick=()=>openRec('수입');$('#fabOut').onclick=()=>openRec('지출');$('#recClose').onclick=closeRec;
 $('#nav').onclick=e=>{if(e.target.dataset.v)show(e.target.dataset.v)};
 window.addEventListener('unhandledrejection',e=>toast('문제가 생겼습니다: '+(e.reason&&e.reason.message||e.reason),[],6000));
 
@@ -706,7 +720,7 @@ function setup(){
   st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
   st.data=F.qd[st.book]||Object.values(F.qd)[0];
   renderBooks();
-  $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(PC?'dash':'rec');if(QUICK)$('#kindSeg').hidden=true;setKind(st.kind);
+  $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(QUICK?'rec':PC?'dash':'list');if(QUICK)$('#kindSeg').hidden=$('#recClose').hidden=true;setKind(st.kind);
 }
 async function enter(){
   const c=cacheGet();let shown=false;
@@ -717,7 +731,7 @@ async function enter(){
 }
 function logout(){
   token=null;me=null;st.data=null;store.del();
-  $('#barTop').hidden=true;$('#nav').hidden=true;$('#amBg').hidden=true;unforcePw();
+  $('#barTop').hidden=true;$('#nav').hidden=true;$('#fab').hidden=true;$('#alert').hidden=true;$('#amBg').hidden=true;unforcePw();
   document.querySelectorAll('main').forEach(m=>m.classList.remove('on'));
   renderAuth();
 }
