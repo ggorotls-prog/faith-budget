@@ -8,27 +8,27 @@
     android:gravity="center_vertical">
 
     <TextView
-        android:id="@+id/out"
+        android:id="@+id/in"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:layout_marginEnd="4dp"
-        android:background="@drawable/btn_out"
+        android:background="@drawable/btn_in"
         android:gravity="center"
-        android:text="− 지출"
+        android:text="+ 수입"
         android:textColor="#ffffff"
         android:textSize="18sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/in"
+        android:id="@+id/out"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:layout_marginStart="4dp"
-        android:background="@drawable/btn_in"
+        android:background="@drawable/btn_out"
         android:gravity="center"
-        android:text="+ 수입"
+        android:text="− 지출"
         android:textColor="#ffffff"
         android:textSize="18sp"
         android:textStyle="bold" />
