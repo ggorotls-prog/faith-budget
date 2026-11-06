@@ -91,3 +91,8 @@ grant execute on function public.fin_fixed_delete(text,uuid,uuid) to anon;
 -- 2026-11-06 룡: 십일조·봉헌물·이웃 나눔은 고정 금액이 아니라 수입이 들어올 때마다 낸다 → 가정 고정비에서 뺌
 update public.fin_fixed f set active=false from public.fin_items i, public.fin_books b
 where i.id=f.item_id and b.id=f.book_id and b.name='가정' and i.rate is not null and f.active;
+
+-- 2026-11-06 룡: 가정 고정 지출에서 뺌(절기헌금·왕할매 섬김·부모님 둘·사역비·테슬라·미국 국채·영양제·경조사/선물), 학비 고정 금액 30만
+update public.fin_fixed f set active=false from public.fin_books b where b.id=f.book_id and b.name='가정' and f.active
+ and (f.name in ('절기헌금','왕할매 섬김','부모님 (춘자네)','부모님 (애영)','사역비','테슬라','미국 국채','가족관리비 · 영양제') or f.name like '경조사/선물%');
+update public.fin_fixed f set amount=300000 from public.fin_books b where b.id=f.book_id and b.name='가정' and f.active and f.name='학비';
