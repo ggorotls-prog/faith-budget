@@ -173,3 +173,10 @@ on conflict do nothing;
 insert into public.fin_scopes(work_member_id, book_id, area)
 select m.id, b.id, '' from public.work_members m, public.fin_books b where m.login_id='깐깐룡이' and b.name='가정'
 on conflict do nothing;
+
+-- 2026-11-06 룡: 기업은 룡·아내가 메인으로 관리 → 둘 다 기업 모든 영역(공통·청소·포멘토·그린주의·오레진) 기록 권한
+insert into public.fin_scopes(work_member_id, book_id, area)
+select m.id, b.id, a.area from public.work_members m cross join public.fin_books b
+cross join (select distinct area from public.fin_items i join public.fin_books bb on bb.id=i.book_id where bb.name='기업') a
+where m.login_id in ('깐깐룡이','예쁜영이') and b.name='기업'
+on conflict do nothing;
