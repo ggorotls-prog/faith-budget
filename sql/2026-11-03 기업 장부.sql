@@ -180,3 +180,9 @@ select m.id, b.id, a.area from public.work_members m cross join public.fin_books
 cross join (select distinct area from public.fin_items i join public.fin_books bb on bb.id=i.book_id where bb.name='기업') a
 where m.login_id in ('깐깐룡이','예쁜영이') and b.name='기업'
 on conflict do nothing;
+
+-- 2026-11-06 룡: 귀욤월이도 예쁜영이와 같은 기록 권한(가정 + 기업 전체)
+insert into public.fin_scopes(work_member_id, book_id, area)
+select m.id, s.book_id, s.area from public.work_members m, public.fin_scopes s join public.work_members r on r.id=s.work_member_id
+where m.login_id='귀욤월이' and r.login_id='예쁜영이'
+on conflict do nothing;
