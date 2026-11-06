@@ -85,3 +85,5 @@ select b.name, count(*) 고정비, count(f.day) 날짜있음 from public.fin_fix
 
 grant execute on function public.fin_fixed_save(text,uuid,uuid,text,uuid,int,bigint,text) to anon;
 grant execute on function public.fin_fixed_delete(text,uuid,uuid) to anon;
+
+-- 2026-11-06 룡: 고정비 설정은 장부 구성원 누구나(공통 월세를 룡이 못 고치던 것). fin_fixed_save·fin_fixed_delete에서 영역 권한 검사를 뺐다(DB에 적용됨). 냈어요 기록은 fin_add가 계속 영역 권한을 본다.

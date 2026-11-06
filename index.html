@@ -459,12 +459,12 @@ function fixedHtml(){
   return `<div class="fx"><h4 data-t="1"><span>${st.fxOpen?'▾':'▸'} 이번 달 고정 ${isCo()?'경비':'지출'}</span><small>${done}/${fx.length} 냄 · ${won(fx.reduce((s,f)=>s+f.amt,0))}</small></h4>`+
    (st.fxOpen?fx.map(fxRow).join('')+`<button class="fadd" data-fa="1">＋ 고정비 추가</button>`:'')+'</div>';
 }
-// 첫 화면(내역 위): 날짜를 정했고 그날이 지났는데 안 낸 것, 두 장부 모두. 이번 달일 때만
+// 첫 화면(내역 위): 날짜를 정했고 그날이 지났는데 안 낸 것. 지금 고른 장부 것만(2026-11-06 룡). 이번 달일 때만
 function dueHtml(){
   if(st.month.slice(0,7)!==today().slice(0,7))return '';
-  const due=Object.values(F.qd||{}).flatMap(fixedOf).filter(f=>f.day&&f.day<=dayNow()&&!f.paid);
+  const due=fixedOf(st.data).filter(f=>f.day&&f.day<=dayNow()&&!f.paid);
   if(!due.length)return '';
-  return `<div class="fx due"><h4><span>📌 낼 날 된 것 ${due.length}건</span><small>${won(due.reduce((s,f)=>s+f.amt,0))}</small></h4>${due.map(f=>fxRow({...f,tag:bookName(f.bk)})).join('')}</div>`;
+  return `<div class="fx due"><h4><span>📌 낼 날 된 것 ${due.length}건</span><small>${won(due.reduce((s,f)=>s+f.amt,0))}</small></h4>${due.map(fxRow).join('')}</div>`;
 }
 async function payFixed(bk,id,amount){
   if(st.busy)return;
@@ -490,9 +490,8 @@ async function payFixed(bk,id,amount){
 // 고정비 보기·고치기·추가·지우기. 위에 「어디로 내나」를 크게, 복사 버튼
 function editFixed(bk,id){
   const d=F.qd[bk]||st.data,f=id?fixedOf(d).find(x=>x.id===id):null;
-  const mine=scopes().filter(sc=>sc.book===bk).map(sc=>sc.area);
-  const its=d.items.filter(i=>i.kind==='지출'&&mine.includes(i.area||''));
-  const can=!f||its.some(i=>i.id===f.item_id);
+  const its=d.items.filter(i=>i.kind==='지출');   // 고정비 설정은 장부 구성원 누구나(냈어요 기록만 영역 권한, 2026-11-06 룡)
+  const can=true;
   const groups={};its.forEach(i=>{const k=i.area||i.bucket;(groups[k]=groups[k]||[]).push(i)});
   $('#form').innerHTML=(f&&f.account?`<div class="acc"><small>어디로 내나</small><span id="accTxt">${esc(f.account)}</span><button type="button" id="f-cp">복사</button></div>`:'')+
    (can?`<label>이름<input id="fx-n" value="${esc(f?f.name:'')}" placeholder="예: 전기(현대)"></label>
