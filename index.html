@@ -317,7 +317,9 @@ const coScopes=()=>scopes().filter(s=>bookName(s.book)==='기업'&&itemsOf(s).le
 function startFlow(){F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
-  if(!F.bk)return;   // 가정|기업은 늘 묻는다(2026-11-06 룡)
+  // 위젯은 가정|기업을 늘 묻고, 앱은 위쪽 가정|기업 버튼에서 고른 장부를 그대로 쓴다(2026-11-06 룡)
+  if(!F.bk){if(QUICK||!st.book)return;F.bk=bookName(st.book);F.bkAuto=true}
+  if(!myBooks().includes(F.bk))return;
   if(!F.area){
     if(F.bk==='가정')F.area='가정';
     else{const cs=coScopes();if(cs.length===1){F.area=cs[0].name;F.areaAuto=true}else return}
@@ -333,7 +335,7 @@ function resolve(){
     return{lv,opts,c};
   }
 }
-const stepOf=()=>{if(!st.amount)return 'amount';if(F.item)return 'memo';const r=resolve();if(F.item)return 'memo';if(!F.bk)return 'book';if(!F.area)return 'area';return r?'pick':'none'};
+const stepOf=()=>{if(!st.amount)return 'amount';if(F.item)return 'memo';const r=resolve();if(F.item)return 'memo';if(!F.bk)return 'book';if(!myBooks().includes(F.bk))return 'nobook';if(!F.area)return 'area';return r?'pick':'none'};
 function renderAmount(){const a=$('#amt');a.textContent=won(st.amount||0);a.classList.toggle('zero',!st.amount)}
 function renderDate(){
   const d=new Date(st.date+'T00:00');
@@ -354,6 +356,7 @@ function renderFlow(){
   $('#crumb').textContent=crumb.join(' › ');
   let h='';
   if(step==='none')h=`<p class="none">기록은 결제권이 있는 사람만 해요. 내역·손익은 볼 수 있어요.</p>`;
+  else if(step==='nobook')h=`<p class="none">${esc(F.bk)} 장부는 결제권이 있는 사람만 기록해요.<br>위에서 다른 장부를 골라 주세요.</p>`;
   else if(step==='book'){const ok=myBooks();h=`<h4>어디 돈?</h4><div class="bb two">${['가정','기업'].map(b=>ok.includes(b)?bigBtn(`data-bk="${esc(b)}"`,b):`<button class="off" data-no="${b}">${b}<small>결제권 없음</small></button>`).join('')}</div>`}
   else if(step==='area')h=`<h4>기업 어느 영역?</h4><div class="bb two">${coScopes().map(s=>bigBtn(`data-area="${esc(s.name)}"`,s.name)).join('')}</div>`;
   else if(step==='pick'){const r=resolve();
@@ -680,7 +683,7 @@ function renderBooks(){
   const bs=me.books||[];const el=$('#books');el.hidden=bs.length<2;
   el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
 }
-$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(QUICK?'rec':PC?'dash':'list')};
+$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;F.bk=null;F.area=null;F.path=[];F.item=null;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(QUICK?'rec':PC?'dash':'list')};
 function show(v){
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
