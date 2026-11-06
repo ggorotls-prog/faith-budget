@@ -21,9 +21,10 @@ alter table public.fin_entries add column if not exists fund_id uuid references 
 -- 시트 값(2026-11-06 시트 「10월」에서 읽음). 잔액은 시트의 지금 잔액 = 만들 때 잔액, 이후 앱 기록이 빼 나간다
 insert into public.fin_funds(book_id,item_id,name,due,start,balance0,monthly,plan,sort)
 select b.id, i.id, v.name, v.due, v.start, v.bal, v.monthly, v.plan, v.sort
-from (values ('사역비','키르기스스탄','26년 11월',8074800,6500000,2760000,'',1),
-             ('사역비','MY5K 펀딩','',100000,100000,100000,'',2),
-             ('교육비','충성 등록금','27년 2월',2000000,2000000,300000,'총 200만원',3)) v(item,name,due,start,bal,monthly,plan,sort)
+-- 금액은 공개 저장소라 0으로 바꿈. 실제 값은 backup\sql\ 사본(저장소 밖)에 있다 (2026-11-06)
+from (values ('사역비','키르기스스탄','26년 11월',0,0,0,'',1),
+             ('사역비','MY5K 펀딩','',0,0,0,'',2),
+             ('교육비','충성 등록금','27년 2월',0,0,0,'',3)) v(item,name,due,start,bal,monthly,plan,sort)
 join public.fin_books b on b.name='가정'
 join public.fin_items i on i.book_id=b.id and i.middle=v.item and i.detail=''
 where not exists (select 1 from public.fin_funds f where f.book_id=b.id and f.name=v.name);
