@@ -147,6 +147,42 @@ nav button.on{color:var(--main)}
 #flow .none{color:var(--sub);text-align:center;padding:40px 20px}
 .quick .fh{padding-top:4px}
 #saveBtn.save{border-radius:0;padding:15px;font-size:17px}
+/* 폰: 기록 위 알림 한 줄(예산 넘은 것·안 낸 고정) (2026-11-06 룡: 폰은 수집 + 급하고 중요한 것만) */
+#alert{margin:8px 12px 0;padding:10px 12px;border-radius:12px;background:#fdecec;color:var(--bad);font-size:14px;font-weight:600;text-align:left;line-height:1.45}
+#alert small{display:block;color:#8a4a4a;font-weight:500}
+/* PC: 대시보드 (2026-11-06 룡: PC는 수집보다 전체·쌓인 기록·통계) */
+#nav [data-v=dash]{display:none}
+.pc #nav [data-v=dash]{display:block}
+.pc #barTop{order:-2;padding:10px 24px 0}
+.pc #nav{order:-1;border-top:0;border-bottom:1px solid var(--line);justify-content:center;gap:8px;padding:0 24px}
+.pc #nav button{flex:none;padding:12px 22px}
+.pc #nav button.on{box-shadow:inset 0 -3px 0 var(--main)}
+.pc main#v-rec,.pc main#v-list,.pc main#v-bud{width:100%;max-width:560px;margin:0 auto}
+.pc #toast{left:50%;right:auto;transform:translateX(-50%);width:min(560px,90vw);bottom:24px}
+.pc #dlg{align-items:center;justify-content:center}.pc #dlg form{max-width:480px;border-radius:16px}
+#dash{padding:0 24px 32px}
+.dg{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;max-width:1240px;margin:0 auto}
+.dc{background:var(--card);border-radius:14px;padding:16px;grid-column:span 6;min-width:0}
+.dc.full{grid-column:1/-1}.dc.s4{grid-column:span 4}.dc.s8{grid-column:span 8}.dc.s3{grid-column:span 3}
+.dc h3{margin:0 0 12px;font-size:15px;display:flex;justify-content:space-between;gap:8px}
+.dc h3 small{color:var(--sub);font-weight:500;font-size:13px}
+.kpi small{color:var(--sub);font-size:13px;display:block}
+.kpi b{font-size:24px;display:block;margin:2px 0;font-variant-numeric:tabular-nums}
+.kpi em{font-style:normal;font-size:13px;color:var(--sub)}
+.up{color:var(--bad)!important}.dn{color:var(--main)!important}
+.neg{color:var(--bad)}
+.lg{display:flex;gap:14px;font-size:13px;color:var(--sub);margin-bottom:6px}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.chart svg{width:100%;height:auto;display:block}
+.chart text{font-size:11px;fill:var(--sub)}
+table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.pv th,.pv td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.pv th:first-child,.pv td:first-child{text-align:left;white-space:normal}
+.pv thead th{color:var(--sub);font-weight:600}
+.pv tr.gh td{background:var(--bg);font-weight:700}
+.pv td.avg{color:var(--sub)}
+.ovl .ln .t b{color:var(--bad)}
+@media(max-width:1100px){.dc,.dc.s4,.dc.s8{grid-column:1/-1}.dc.s3{grid-column:span 6}}
 </style>
 </head>
 <body>
@@ -175,11 +211,13 @@ nav button.on{color:var(--main)}
     </form>
   </div>
 </div>
+<main id="v-dash"><div class="month" data-m></div><div id="dash" class="scroll"></div></main>
 <main id="v-rec">
   <div class="top">
     <div class="seg" id="kindSeg"><button id="k-out" class="on">지출</button><button id="k-in" class="in">수입</button></div>
     <label class="date"><span id="dateLbl"></span><input type="date" id="date" aria-label="날짜"></label>
   </div>
+  <button id="alert" hidden></button>
   <div class="fh"><button id="back" aria-label="뒤로" hidden>‹</button><div id="crumb"></div></div>
   <div id="flow" class="scroll"></div>
   <div id="pay" hidden>
@@ -195,7 +233,7 @@ nav button.on{color:var(--main)}
 <main id="v-list"><div class="month" data-m></div><div id="list" class="scroll"></div></main>
 <main id="v-bud"><div class="month" data-m></div><div id="bud" class="scroll"></div></main>
 <nav id="nav" hidden>
-  <button data-v="rec" class="on">기록</button><button data-v="list">내역</button><button data-v="bud" id="nav3">예산안</button>
+  <button data-v="dash">대시보드</button><button data-v="rec" class="on">기록</button><button data-v="list">내역</button><button data-v="bud" id="nav3">예산안</button>
 </nav>
 <div id="toast"></div>
 <div id="dlg"><form id="form"></form></div>
@@ -224,6 +262,9 @@ const DAILY_MID=['식비','아침식비','교통비','생필품','기타지출',
 const isDaily=i=>DAILY_MID.includes(i.middle)||(i.middle==='가족관리비'&&DAILY_FAM.includes(i.detail));
 // 장부: 가정은 예전 그대로, 기업은 영역(청소·포멘토·그린주의·오레진)별 손익 + 공통 경비 (2026-11-03 룡 기준)
 const isCo=()=>st.data&&st.data.book==='기업';
+// PC = 넓은 화면의 브라우저(앱·빠른 창은 늘 폰) → 대시보드부터
+const PC=!QUICK&&!window.Android&&matchMedia('(min-width:900px)').matches;
+if(PC)document.body.classList.add('pc');
 // 오레진 수당: 3.3%를 떼고 통장에 들어온다. 받은 돈만 누르면 세전·뗀 세금을 계산 (2026-11-05 귀룡 확인, 판매-기준.md)
 const isLC=i=>!!i&&i.area==='오레진'&&i.middle==='수당';
 const lcTax=net=>{const g=Math.round(net/0.967);return{gross:g,tax:g-net}};
@@ -290,6 +331,7 @@ function renderFlow(){
   $('#flow').innerHTML=h;
   if(step==='amount')renderAmount();
   if(step==='memo')setTimeout(()=>$('#memo').focus(),50);
+  renderAlert();
 }
 // 항목: 그 영역 것만, 중분류 제목 아래 한 줄씩. 식비는 주차를 날짜로 정하므로 버튼 하나
 function itemButtons(){
@@ -407,10 +449,33 @@ function editEntry(en){
 }
 
 /* 예산안 (시트와 같은 계산) */
-function budgetOf(i,base){
-  if(i.rate)return Math.round(base/0.87*Number(i.rate)/100)*100;
-  return Number(st.data.budgets[i.id]||0);
+function budgetOf(i,base,d=st.data){
+  if(i.rate){const r=Number(i.rate);return Math.round(base/0.87*(r<1?r:r/100)/100)*100}
+  return Number(d.budgets[i.id]||0);
 }
+// 예산 넘은 항목(가정): 실제 > 예산. 넘은 금액 큰 순
+function overOf(d){
+  if(!d||d.book==='기업')return[];
+  const it=d.items.filter(i=>i.kind==='지출'),base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(d.budgets[i.id]||0),0);
+  const act={};d.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
+  return it.map(i=>({i,b:budgetOf(i,base,d),a:act[i.id]||0})).filter(x=>x.b>0&&x.a>x.b).map(x=>({...x,over:x.a-x.b})).sort((p,q)=>q.over-p.over);
+}
+// 폰 알림: 이번 달일 때만. 예산 넘은 것 + 납부일 지난 안 낸 고정 경비
+function renderAlert(){
+  const el=$('#alert');if(!el)return;
+  const now=st.month.slice(0,7)===today().slice(0,7);
+  const ds=Object.values(F.qd||{});
+  const over=now?ds.flatMap(overOf):[];
+  const late=now?ds.filter(d=>d.book==='기업').flatMap(d=>(d.fixed||[]).filter(f=>!f.paid&&f.day&&f.day<=Number(today().slice(8)))):[];
+  if(PC||QUICK||stepOf()!=='amount'||(!over.length&&!late.length)){el.hidden=true;return}
+  const lines=[];
+  if(over.length)lines.push('⚠ 예산 넘음: '+over.slice(0,3).map(x=>esc(itemName(x.i))+' +'+won(x.over)).join(', ')+(over.length>3?` 외 ${over.length-3}`:''));
+  if(late.length)lines.push('⏰ 안 낸 고정 경비 '+late.length+'건: '+late.slice(0,3).map(f=>esc(f.name)).join(', '));
+  el.innerHTML=lines.join('<br>')+'<small>눌러서 자세히</small>';el.hidden=false;
+}
+$('#alert').onclick=()=>{const d=Object.values(F.qd).find(d=>overOf(d).length)||Object.values(F.qd).find(d=>d.book==='기업');
+  if(d&&d.book!==st.data.book){const b=(me.books||[]).find(b=>b.name===d.book);if(b){st.book=b.id;st.data=F.qd[b.id];renderBooks();render()}}
+  show('bud')};
 /* 기업 손익: 영역마다 매출 − 재료비 − 인건비 = 이익, 공통 경비는 따로, 전체 = 영역 이익 합 − 공통 경비 */
 function renderProfit(){
   const act={};st.data.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
@@ -481,13 +546,103 @@ function editBudget(i){
   $('#dlg').classList.add('on');
 }
 
-function render(){renderDate();renderFlow();renderMonth();renderList();renderBudget();$('#nav3').textContent=isCo()?'손익':'예산안'}
+/* PC 대시보드: 이번 달 한눈에 + 12달 추이 + 분류별 6달 표 + 큰 지출 (2026-11-06 룡: PC = 대시보드·통계) */
+F.hist={};
+const monthsBack=(m,n)=>{const [y,mm]=m.split('-').map(Number);return [...Array(n)].map((_,k)=>ymd(new Date(y,mm-1-(n-1-k),1)))};
+async function histOf(book,m){
+  const k=book+'|'+m;
+  if(m===st.month&&F.qd[book])return F.hist[k]=F.qd[book];
+  if(!F.hist[k])F.hist[k]=await rpc('fin_load',{p_month:m,p_book:book});
+  return F.hist[k];
+}
+// 한 달 숫자: 가정은 이월 뺀 수입·지출, 기업은 매출·비용(오레진 수당 포함)
+function monthNums(d){
+  const it={};d.items.forEach(i=>it[i.id]=i);
+  let inc=0,out=0,carry=0,lc=0;
+  d.entries.forEach(e=>{const i=it[e.item_id];if(!i)return;const a=Number(e.amount);
+    if(i.kind==='수입'){if(i.middle==='이월')carry+=a;else inc+=a;if(isLC(i))lc+=a}else out+=a});
+  return{inc,out,carry,lc};
+}
+const mLbl=m=>Number(m.slice(5,7))+'월';
+const pct=(a,b)=>b?Math.round((a-b)/b*100):null;
+function delta(a,b,badUp){const p=pct(a,b);if(p===null)return '<em>지난달 기록 없음</em>';
+  const cls=p===0?'':(p>0)===badUp?'up':'dn';return `<em class="${cls}">지난달보다 ${p>0?'▲':'▼'} ${Math.abs(p)}%</em>`}
+function barChart(ms,nums){
+  const W=720,H=220,P=40,max=Math.max(1,...nums.flatMap(n=>[n.inc,n.out]));
+  const bw=(W-P)/ms.length,y=v=>H-20-(H-34)*v/max;
+  const tick=[0,.5,1].map(t=>`<line x1="${P}" x2="${W}" y1="${y(max*t)}" y2="${y(max*t)}" stroke="var(--line)"/><text x="${P-4}" y="${y(max*t)+4}" text-anchor="end">${Math.round(max*t/10000).toLocaleString('ko-KR')}만</text>`).join('');
+  const bars=ms.map((m,k)=>{const x=P+k*bw,n=nums[k],w=Math.max(4,bw/2-5);
+    return `<g><title>${mLbl(m)} 수입 ${won(n.inc)} · 지출 ${won(n.out)}</title>
+      <rect x="${x+3}" y="${y(n.inc)}" width="${w}" height="${H-20-y(n.inc)}" rx="2" fill="var(--in)"/>
+      <rect x="${x+3+w+2}" y="${y(n.out)}" width="${w}" height="${H-20-y(n.out)}" rx="2" fill="#9aa59f"/>
+      <text x="${x+bw/2}" y="${H-5}" text-anchor="middle"${m===st.month?' style="fill:var(--ink);font-weight:700"':''}>${mLbl(m)}</text></g>`}).join('');
+  return `<div class="lg"><span><i style="background:var(--in)"></i>수입</span><span><i style="background:#9aa59f"></i>지출</span></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="12달 수입·지출">${tick}${bars}</svg>`;
+}
+// 분류별 6달 표: 대분류(기업은 영역 · 대분류), 수입·지출 따로
+function pivot(ms,ds){
+  const rows={};const key=i=>(i.area?i.area+' · ':'')+i.bucket;
+  ds.forEach((d,k)=>{const it={};d.items.forEach(i=>it[i.id]=i);
+    d.entries.forEach(e=>{const i=it[e.item_id];if(!i||i.middle==='이월')return;
+      const rk=i.kind+'|'+key(i);const r=(rows[rk]=rows[rk]||{kind:i.kind,name:key(i),v:Array(ms.length).fill(0)});r.v[k]+=Number(e.amount)})});
+  const head=`<thead><tr><th>분류</th>${ms.map(m=>`<th>${mLbl(m)}</th>`).join('')}<th>평균</th></tr></thead>`;
+  const tot=v=>v.reduce((s,x)=>s+x,0);
+  const tr=(n,v,cls='')=>`<tr class="${cls}"><td>${esc(n)}</td>${v.map(x=>`<td>${x?x.toLocaleString('ko-KR'):'·'}</td>`).join('')}<td class="avg">${Math.round(tot(v)/v.length).toLocaleString('ko-KR')}</td></tr>`;
+  const body=['수입','지출'].map(kind=>{const rs=Object.values(rows).filter(r=>r.kind===kind).sort((a,b)=>tot(b.v)-tot(a.v));
+    if(!rs.length)return '';
+    return tr(kind+' 합계',ms.map((_,k)=>rs.reduce((s,r)=>s+r.v[k],0)),'gh')+rs.map(r=>tr(r.name,r.v)).join('')}).join('');
+  return `<div style="overflow:auto"><table class="pv">${head}<tbody>${body}</tbody></table></div>`;
+}
+const entBtn=(e,it)=>{const i=it[e.item_id]||{};const inc=i.kind==='수입';
+  return `<button class="ent" data-e="${e.id}"><span>${esc((i.area?i.area+' ':'')+itemName(i))}<small>${esc(e.date.slice(5).replace('-','/'))} ${esc([e.memo,e.by].filter(Boolean).join(' · '))}</small></span><b class="${inc?'inc':''}">${inc?'+':''}${won(e.amount)}</b></button>`};
+async function renderDash(){
+  const el=$('#dash');if(!el||!st.data)return;
+  const book=st.book,month=st.month,tok=renderDash.t=(renderDash.t||0)+1;
+  if(!el.innerHTML)el.innerHTML='<p style="color:var(--sub);text-align:center;padding:40px">불러오는 중…</p>';
+  const ms=monthsBack(month,12);
+  let ds;try{ds=await Promise.all(ms.map(m=>histOf(book,m)))}catch(e){el.innerHTML=`<p style="padding:40px;text-align:center;color:var(--sub)">불러오지 못했습니다: ${esc(e.message)}</p>`;return}
+  if(tok!==renderDash.t)return;
+  const d=ds[ds.length-1],co=d.book==='기업',nums=ds.map(monthNums),n=nums[nums.length-1],p=nums[nums.length-2];
+  const yr=month.slice(0,4),yIdx=ms.map((m,k)=>m.startsWith(yr)?k:-1).filter(k=>k>=0);
+  const ySum=f=>yIdx.reduce((s,k)=>s+f(nums[k]),0);
+  const kpi=(t,v,sub)=>`<div class="dc kpi s3"><small>${t}</small><b class="${v<0?'neg':''}">${won(v)}</b>${sub}</div>`;
+  let h='<div class="dg">';
+  if(co){
+    const lc=ySum(x=>x.lc),t=lcTax(lc);
+    h+=kpi(mLbl(month)+' 매출',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 비용',n.out,delta(n.out,p.out,true))+kpi(mLbl(month)+' 이익',n.inc-n.out,'<em>매출 − 비용</em>')
+      +kpi(yr+'년 이익 (쌓인 것)',ySum(x=>x.inc-x.out),lc?`<em>오레진 수당 ${won(lc)} · 뗀 세금 ${won(t.tax)}</em>`:`<em>${yIdx.length}달 합</em>`);
+  }else{
+    const it=d.items.filter(i=>i.kind==='지출'),base=it.filter(i=>!i.rate).reduce((s,i)=>s+Number(d.budgets[i.id]||0),0),plan=it.reduce((s,i)=>s+budgetOf(i,base,d),0);
+    h+=kpi(mLbl(month)+' 수입',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 지출',n.out,delta(n.out,p.out,true))
+      +kpi('잔액 (이월 포함)',n.carry+n.inc-n.out,`<em>이월 ${won(n.carry)}</em>`)+kpi('예산 대비 지출',n.out,`<em>예산 ${won(plan)} 중 ${plan?Math.round(n.out/plan*100):0}%</em>`);
+  }
+  h+=`<div class="dc s8 chart"><h3>12달 수입·지출<small>${mLbl(ms[0])}~${mLbl(month)}</small></h3>${barChart(ms,nums)}</div>`;
+  if(co){
+    const areas=[...new Set(d.items.filter(i=>i.area).map(i=>i.area))],acc={};
+    yIdx.forEach(k=>{const dd=ds[k],it={};dd.items.forEach(i=>it[i.id]=i);
+      dd.entries.forEach(e=>{const i=it[e.item_id];if(i&&i.area)acc[i.area]=(acc[i.area]||0)+(i.kind==='수입'?1:-1)*Number(e.amount)})});
+    h+=`<div class="dc s4 pl"><h3>${yr}년 영역별 이익<small>매출 − 재료비 − 인건비</small></h3>${areas.map(a=>{const v=acc[a]||0;return `<div class="ln"><div class="t"><span>${esc(a)}</span><b class="${v<0?'neg':''}">${won(v)}</b></div></div>`}).join('')}</div>`;
+  }else{
+    const ov=overOf(d);
+    h+=`<div class="dc s4 ovl"><h3>예산 넘은 것<small>${mLbl(month)} · ${ov.length}개</small></h3>${ov.length?ov.slice(0,8).map(x=>`<div class="ln"><div class="t"><span>${esc(itemName(x.i))}</span><b>+${won(x.over)}</b></div><div class="t"><em>${won(x.a)} / 예산 ${won(x.b)}</em></div></div>`).join(''):'<p style="color:var(--sub)">없습니다</p>'}</div>`;
+  }
+  h+=`<div class="dc full"><h3>분류별 6달<small>단위 원 · 평균은 6달</small></h3>${pivot(ms.slice(-6),ds.slice(-6))}</div>`;
+  const it={};d.items.forEach(i=>it[i.id]=i);
+  const big=d.entries.filter(e=>(it[e.item_id]||{}).kind==='지출').sort((a,b)=>b.amount-a.amount).slice(0,8);
+  const recent=[...d.entries].sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date))).slice(0,8);
+  const none='<p style="color:var(--sub)">기록이 없습니다</p>';
+  h+=`<div class="dc"><h3>${mLbl(month)} 큰 지출<small>금액 순</small></h3>${big.map(e=>entBtn(e,it)).join('')||none}</div>`;
+  h+=`<div class="dc"><h3>최근 기록<small>${mLbl(month)}</small></h3>${recent.map(e=>entBtn(e,it)).join('')||none}</div>`;
+  el.innerHTML=h+'</div>';
+}
+$('#dash').onclick=e=>{const b=e.target.closest('[data-e]');if(b)editEntry(st.data.entries.find(x=>x.id===b.dataset.e))};
+
+function render(){renderDate();renderFlow();renderMonth();renderList();renderBudget();renderAlert();if(PC)renderDash();$('#nav3').textContent=isCo()?'손익':'예산안'}
 /* 장부 고르기: 두 장부가 있을 때만 보인다. 마지막에 본 장부를 기억한다 */
 function renderBooks(){
   const bs=me.books||[];const el=$('#books');el.hidden=bs.length<2;
   el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
 }
-$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(QUICK?'rec':'list')};
+$('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(QUICK?'rec':PC?'dash':'list')};
 function show(v){
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
@@ -506,7 +661,7 @@ async function enter(){
   const bs=me.books||[];let saved=null;try{saved=localStorage.getItem('fin_book')}catch(x){}
   st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
   renderBooks();await loadAll();
-  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;show('rec');if(QUICK)$('#kindSeg').hidden=true;setKind(st.kind);
+  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(PC?'dash':'rec');if(QUICK)$('#kindSeg').hidden=true;setKind(st.kind);
   if(me.must_change_pw)forcePw();
 }
 function logout(){
