@@ -133,6 +133,8 @@ nav button.on{color:var(--main)}
 .fx.due>h4{color:#a5541b}
 .fx.give{margin:8px 0 4px;border-color:#bfe0d1;background:#f3faf6}
 .fx.give>h4{color:var(--main)}
+.fx.fd .fr b{font-size:14px}
+#fundPick .chip{margin:0}
 .fx .fr em{font-style:normal;color:var(--sub);font-size:12px}
 .acc{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:15px;font-weight:600;color:var(--ink);display:flex;flex-wrap:wrap;gap:6px;align-items:center;white-space:pre-wrap}
 .acc small{width:100%;font-size:12px;color:var(--sub);font-weight:500}
@@ -247,6 +249,7 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
     <button id="nextBtn" class="main-btn save">다음</button>
   </div>
   <div id="memoBox" hidden>
+    <div id="fundPick"></div>
     <input id="memo" class="memo" placeholder="메모 (안 써도 됩니다)" autocomplete="off">
     <button id="saveBtn" class="main-btn save">저장</button>
   </div>
@@ -335,7 +338,7 @@ const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</b
 const LV=['bucket','middle','detail'];
 const myBooks=()=>[...new Set(scopes().map(s=>bookName(s.book)))].filter(b=>scopes().some(s=>bookName(s.book)===b&&itemsOf(s).length));
 const coScopes=()=>scopes().filter(s=>bookName(s.book)==='기업'&&itemsOf(s).length);
-function startFlow(){F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
+function startFlow(){F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
   // 위젯은 가정|기업을 늘 묻고, 앱은 위쪽 가정|기업 버튼에서 고른 장부를 그대로 쓴다(2026-11-06 룡)
@@ -387,7 +390,12 @@ function renderFlow(){
       return bigBtn(`data-v="${esc(o)}"`,lbl)}).join('')}</div>`}
   $('#flow').innerHTML=h;
   if(step==='amount')renderAmount();
-  if(step==='memo')setTimeout(()=>$('#memo').focus(),50);
+  if(step==='memo'){
+    const fs=F.item?fundsOf(F.item):[];
+    if(fs.length===1&&F.fund===undefined)F.fund=fs[0].id;
+    $('#fundPick').innerHTML=fs.length?`<h5 style="margin:6px 12px 4px">어디에 낸 돈?</h5><div class="row" style="padding:0 12px 8px">${fs.map(f=>`<button class="chip${F.fund===f.id?' fav':''}" data-fund="${f.id}">${esc(f.name)}</button>`).join('')}<button class="chip${!F.fund?' fav':''}" data-fund="">해당 없음</button></div>`:'';
+    if(!fs.length)setTimeout(()=>$('#memo').focus(),50);
+  }
   renderAlert();
 }
 $('#flow').onclick=e=>{
@@ -399,7 +407,7 @@ $('#flow').onclick=e=>{
 };
 // 뒤로: 저절로 넘어간 칸은 건너뛰고, 내가 고른 칸 하나를 되돌린다
 $('#back').onclick=()=>{
-  F.item=null;
+  F.item=null;F.fund=undefined;
   while(F.path.length&&F.path[F.path.length-1].auto)F.path.pop();
   if(F.path.length)F.path.pop();
   else if(F.bk==='기업'&&F.area&&!F.areaAuto){F.area=null}
@@ -420,13 +428,14 @@ $('#nextBtn').onclick=()=>{if(!st.amount){const a=$('#amt');a.classList.remove('
 $('#k-out').onclick=()=>setKind('지출');$('#k-in').onclick=()=>setKind('수입');
 $('#date').onchange=e=>{if(e.target.value){st.date=e.target.value;renderDate();if(F.item&&isWeek(F.item))F.item=null,F.path=F.path.slice(0,2);renderFlow()}};
 $('#saveBtn').onclick=save;
+$('#fundPick').onclick=e=>{const b=e.target.closest('[data-fund]');if(!b)return;F.fund=b.dataset.fund||null;renderFlow()};
 $('#memo').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save()}};
 async function save(){
   const i=F.item,sc=scopeOf(F.area);if(!i||!sc||st.busy)return;
   st.busy=true;
   const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date,book=sc.book;
   try{
-    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book});
+    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book,p_fund:fundsOf(i).some(f=>f.id===F.fund)?F.fund:null});
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]];
     if(i.kind==='수입'&&TITHE.includes(i.middle)){
       const t=Math.ceil(amount/10),ti=(F.qd[book].items||[]).find(x=>x.middle==='십일조(10%)');
@@ -439,6 +448,38 @@ async function save(){
     if(QUICK)setTimeout(closeQuick,acts.length>1?6000:1000);else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
   }catch(e){toast('저장 안 됨. ('+e.message+')',[],8000)}
   st.busy=false;
+}
+
+/* 사역비·교육비·빚(2026-11-06 룡: 시트 「사역비&교육비&빚」 탭 그대로). 줄마다 납부처·마감·시작 금액·잔액·이달 계획.
+   기록할 때 어느 줄인지 고르면 그 줄 잔액이 줄고, 이달 계획의 합이 그 항목 예산이 된다 */
+const fundsOf=i=>{const d=Object.values(F.qd||{}).find(x=>(x.items||[]).some(y=>y.id===i.id))||st.data;return (d.funds||[]).filter(f=>f.item_id===i.id)};
+function fundsHtml(){
+  const fs=st.data.funds||[];if(!fs.length&&isCo())return '';
+  if(st.fdOpen===undefined)st.fdOpen=true;
+  const it=id=>items().find(i=>i.id===id)||{};
+  return `<div class="fx fd"><h4 data-fd="1"><span>${st.fdOpen?'▾':'▸'} 사역비·교육비·빚</span><small>이달 계획 ${won(fs.reduce((t,f)=>t+Number(f.monthly),0))} · 잔액 ${won(fs.reduce((t,f)=>t+Number(f.balance),0))}</small></h4>`+
+   (st.fdOpen?fs.map(f=>`<div class="fr"><button class="fn" data-fde="${f.id}"><span>${esc(it(f.item_id).middle||'')} · ${esc(f.name)}</span><em>${f.due?'마감 '+esc(f.due)+' · ':''}이달 계획 ${won(f.monthly)} · 이달 낸 것 ${won(f.paid)}</em></button><b>${won(f.balance)}<em style="display:block;text-align:right">/ ${won(f.start)}</em></b></div>`).join('')+`<button class="fadd" data-fda="1">＋ 줄 추가</button>`:'')+'</div>';
+}
+function editFund(id){
+  const d=st.data,f=id?(d.funds||[]).find(x=>x.id===id):null;
+  const its=d.items.filter(i=>i.kind==='지출');
+  const pre=f?f.item_id:(its.find(i=>i.middle==='사역비')||its[0]||{}).id;
+  const num=v=>v?Number(v).toLocaleString('ko-KR'):'';
+  $('#form').innerHTML=`<label>구분 (항목)<select id="fd-i">${its.map(i=>`<option value="${i.id}"${i.id===pre?' selected':''}>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}</option>`).join('')}</select></label>
+   <label>납부처 / 갚을 곳<input id="fd-n" value="${esc(f?f.name:'')}" placeholder="예: 키르기스스탄"></label>
+   <div style="display:flex;gap:8px"><label style="flex:1">최종 납부일<input id="fd-d" value="${esc(f?f.due:'')}" placeholder="예: 26년 11월"></label><label style="flex:1">이자<input id="fd-r" value="${esc(f?f.interest:'')}" placeholder="빚일 때"></label></div>
+   <div style="display:flex;gap:8px"><label style="flex:1">시작 금액 / 채무액<input id="fd-s" inputmode="numeric" value="${num(f&&f.start)}"></label><label style="flex:1">지금 잔액<input id="fd-b" inputmode="numeric" value="${num(f&&f.balance)}" placeholder="비우면 시작 금액"></label></div>
+   <label>이달 계획 (= 이 항목 예산에 더해짐)<input id="fd-m" inputmode="numeric" value="${num(f&&f.monthly)}"></label>
+   <label>상환 계획 / 목적<input id="fd-p" value="${esc(f?f.plan:'')}"></label>
+   <div class="btns">${f?'<button type="button" class="del" id="fd-x">지우기</button>':''}<button type="button" id="f-c">닫기</button><button class="ok">저장</button></div>`;
+  $('#f-c').onclick=closeDlg;
+  const n=sel=>{const v=$(sel).value.replace(/\D/g,'');return v===''?null:Number(v)};
+  if($('#fd-x'))$('#fd-x').onclick=async e=>{const b=e.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent='한 번 더 누르면 지워요';return}
+    try{await rpc('fin_fund_delete',{p_book:st.book,p_id:f.id});closeDlg();await loadAll();render();toast(f.name+' 지웠어요 (지난 기록은 그대로)',[],2500)}catch(x){toast('안 됨. ('+x.message+')',[],5000)}};
+  $('#form').onsubmit=async e=>{e.preventDefault();
+    try{await rpc('fin_fund_save',{p_book:st.book,p_id:f?f.id:null,p_item:$('#fd-i').value,p_name:$('#fd-n').value,p_due:$('#fd-d').value.trim(),p_start:n('#fd-s')||0,p_balance:n('#fd-b'),p_monthly:n('#fd-m')||0,p_plan:$('#fd-p').value.trim(),p_interest:$('#fd-r').value.trim()});
+      closeDlg();await loadAll();render();toast('저장했어요',[],1500)}catch(x){toast('저장 안 됨. ('+x.message+')',[],6000)}};
+  $('#dlg').classList.add('on');
 }
 
 /* 고정비(가정·기업 같은 꼴, 2026-11-06 룡): 손익·예산안 탭 맨 위에 목록 + 「냈어요」, 이름을 누르면 어디로 내는지·고치기.
@@ -547,6 +588,8 @@ function editFixed(bk,id){
 function fxClick(e){
   const b=e.target.closest('button');if(!b)return false;const d=b.dataset;
   if(d.give){payGive(d.give);return true}
+  if(d.fde){editFund(d.fde);return true}
+  if(d.fda){editFund(null);return true}
   if(d.f){payFixed(d.bk||st.book,d.f);return true}
   if(d.fe){editFixed(d.bk||st.book,d.fe);return true}
   if(d.fa){editFixed(st.book,null);return true}
@@ -569,7 +612,8 @@ function renderList(){
     return `<div class="day">${dt.getMonth()+1}/${dt.getDate()} (${'일월화수목금토'[dt.getDay()]})</div>`+by[d].map(e=>{
       const i=item(e.item_id)||{};const inc=i.kind==='수입';
       const nm=i.area?i.area+' '+i.middle:(i.detail?i.middle+' · '+i.detail:i.middle);
-      const sub=isCo()?[i.kind==='지출'&&i.expense===false?'경비 아님':'',e.memo,e.by].filter(Boolean).join(' · '):e.memo;   // 기업은 누가 적었는지도
+      const fn=e.fund?((st.data.funds||[]).find(f=>f.id===e.fund)||{}).name:'';
+      const sub=isCo()?[i.kind==='지출'&&i.expense===false?'경비 아님':'',fn,e.memo,e.by].filter(Boolean).join(' · '):[fn,e.memo].filter(Boolean).join(' · ');   // 기업은 누가 적었는지도
       return `<button class="ent" data-e="${e.id}"><span>${esc(nm)}<small>${esc(sub)}</small></span><b class="${inc?'inc':''}">${inc?'+':''}${won(e.amount)}</b></button>`}).join('');
   }).join(''):'<p style="text-align:center;color:var(--sub);padding:32px">이 달 기록이 없습니다</p>');
 }
@@ -593,6 +637,7 @@ function editEntry(en){
 
 /* 예산안 (시트와 같은 계산) */
 function budgetOf(i,base,d=st.data){
+  const fs=(d.funds||[]).filter(f=>f.item_id===i.id);if(fs.length)return fs.reduce((t,f)=>t+Number(f.monthly||0),0);   // 사역비·교육비·빚: 이달 계획의 합(시트와 같음)
   if(i.rate){const r=Number(i.rate);return Math.round(base/0.87*(r<1?r:r/100)/100)*100}
   return Number(d.budgets[i.id]||0);
 }
@@ -646,7 +691,7 @@ function renderProfit(){
   h+=`<div class="bk pl"><h3>경비 아닌 지출<small>${won(nonex)} · 세금 계산에 안 들어감</small></h3>`;
   [...new Set(items().filter(i=>i.kind==='지출'&&i.expense===false).map(i=>i.middle))].forEach(m=>{const v=sum(i=>i.kind==='지출'&&i.expense===false&&i.middle===m);if(v)h+=row(m,v)});
   h+='</div>';
-  $('#bud').innerHTML=fixedHtml()+h;
+  $('#bud').innerHTML=fixedHtml()+fundsHtml()+h;
 }
 function renderBudget(){
   if(isCo()){renderProfit();return}
@@ -677,10 +722,11 @@ function renderBudget(){
     });
     h+='</div>';
   });
-  $('#bud').innerHTML=fixedHtml()+h;
+  $('#bud').innerHTML=fixedHtml()+fundsHtml()+h;
 }
 $('#bud').onclick=e=>{
   if(e.target.closest('[data-t]')){st.fxOpen=!st.fxOpen;renderBudget();return}
+  if(e.target.closest('[data-fd]')){st.fdOpen=!st.fdOpen;renderBudget();return}
   const b=e.target.closest('button');if(!b)return;
   if(fxClick(e))return;
   if(b.dataset.o){st.open[b.dataset.o]=!st.open[b.dataset.o];renderBudget();return}
@@ -688,6 +734,7 @@ $('#bud').onclick=e=>{
 };
 function editBudget(i){
   if(i.rate){toast('십일조·봉헌물·이웃 나눔 예산은 다른 예산에서 자동 계산됩니다',[],3000);return}
+  if((st.data.funds||[]).some(f=>f.item_id===i.id)){toast(i.middle+' 예산은 「사역비·교육비·빚」 칸의 이달 계획 합이에요. 거기서 고쳐 주세요',[],3500);return}
   $('#form').innerHTML=`<label>${esc(i.detail||i.middle)} 예산 (${Number(st.month.slice(5,7))}월)<input id="f-b" inputmode="numeric" value="${st.data.budgets[i.id]||0}"></label>
    <div class="btns"><button type="button" id="f-c">닫기</button><button class="ok">저장</button></div>`;
   $('#f-c').onclick=closeDlg;
