@@ -250,7 +250,7 @@ const today=()=>ymd(new Date());
 const TITHE=['근로소득','미지정공급','사업소득'];   // 기록 뒤 십일조 버튼을 띄우는 수입
 
 // 로그인 = 업무·영성·건강 기록과 같은 공용 계정(2026-11-02 룡 결정)
-const store={get(){try{return localStorage.getItem('fin_session')}catch(e){return null}},set(t){try{localStorage.setItem('fin_session',t)}catch(e){}},del(){try{localStorage.removeItem('fin_session');localStorage.removeItem('fin_token')}catch(e){}}};
+const store={get(){try{return localStorage.getItem('fin_session')}catch(e){return null}},set(t){try{localStorage.setItem('fin_session',t)}catch(e){}},del(){try{localStorage.removeItem('fin_session');localStorage.removeItem('fin_token');localStorage.removeItem('fin_cache')}catch(e){}}};
 let token=store.get(),me=null;
 
 const st={kind:'지출',date:today(),amount:'',busy:false,month:today().slice(0,7)+'-01',data:null,open:{},book:null,fxOpen:null,more:false};
@@ -296,7 +296,9 @@ function toast(text,actions=[],ms=5000){
 const F={bk:null,area:null,path:[],item:null,qd:{}};
 // 두 장부의 항목을 다 들고 있는다(영역이 장부를 가른다). 내역·손익은 위 가정|기업 토글의 장부(st.data)
 async function loadAll(){
-  for(const b of (me.books||[]))F.qd[b.id]=await rpc('fin_load',{p_month:st.month,p_book:b.id});
+  const bs=me.books||[];const rs=await Promise.all(bs.map(b=>rpc('fin_load',{p_month:st.month,p_book:b.id})));   // 두 장부를 한꺼번에
+  bs.forEach((b,k)=>F.qd[b.id]=rs[k]);
+  if(st.month===today().slice(0,7)+'-01')cacheSet();
   st.data=F.qd[st.book]||Object.values(F.qd)[0];
 }
 const bookName=id=>((me.books||[]).find(b=>b.id===id)||{}).name||'';
@@ -692,12 +694,22 @@ window.addEventListener('unhandledrejection',e=>toast('문제가 생겼습니다
   try{await enter()}
   catch(e){if(token){$('#msg').hidden=false;$('#msg').textContent='열지 못했습니다: '+e.message}}
 })();
-async function enter(){
-  me=await rpc('fin_me',{});
+/* 빠르게 열기(2026-11-06 룡: 위젯이 뻑뻑함): 지난번 받은 계정·이번 달 장부를 폰에 두었다가 바로 그리고,
+   새 것은 뒤에서 받아 바꾼다. 같은 로그인·같은 달일 때만 쓴다 */
+function cacheSet(){try{localStorage.setItem('fin_cache',JSON.stringify({tok:token,month:st.month,me,qd:F.qd}))}catch(x){}}
+function cacheGet(){try{const c=JSON.parse(localStorage.getItem('fin_cache')||'null');return c&&c.tok===token&&c.month===st.month?c:null}catch(x){return null}}
+function setup(){
   const bs=me.books||[];let saved=null;try{saved=localStorage.getItem('fin_book')}catch(x){}
   st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
-  renderBooks();await loadAll();
-  $('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(PC?'dash':'rec');if(QUICK)$('#kindSeg').hidden=true;setKind(st.kind);
+  st.data=F.qd[st.book]||Object.values(F.qd)[0];
+  renderBooks();
+  $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(PC?'dash':'rec');if(QUICK)$('#kindSeg').hidden=true;setKind(st.kind);
+}
+async function enter(){
+  const c=cacheGet();let shown=false;
+  if(c){me=c.me;F.qd=c.qd;setup();shown=true}
+  try{const m=await rpc('fin_me',{});me=m;await loadAll()}catch(e){if(!shown)throw e;if(me&&!token)return;toast('새 정보를 못 받았어요. 지난번 것으로 보여요',[],3000);return}
+  if(!shown)setup();else{renderBooks();render()}
   if(me.must_change_pw)forcePw();
 }
 function logout(){
