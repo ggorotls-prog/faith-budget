@@ -168,3 +168,8 @@ on conflict do nothing;
 insert into public.fin_items(book_id, kind, bucket, middle, detail, sort, active, area)
 select b.id,'수입','사업소득','수당','',39,true,'오레진' from public.fin_books b where b.name='기업'
 on conflict do nothing;
+
+-- 2026-11-06 룡: 깐깐룡이에게 가정 장부 기록 권한도
+insert into public.fin_scopes(work_member_id, book_id, area)
+select m.id, b.id, '' from public.work_members m, public.fin_books b where m.login_id='깐깐룡이' and b.name='가정'
+on conflict do nothing;
