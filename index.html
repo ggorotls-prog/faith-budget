@@ -441,10 +441,13 @@ async function save(){
       if(ti)acts.unshift([`십일조 ${t.toLocaleString('ko-KR')}원도 기록`,async()=>{await rpc('fin_add',{p_date:date,p_item:ti.id,p_amount:t,p_memo:'',p_book:book});await loadAll();render();toast('십일조도 기록했습니다',[],1500)}]);
     }
     const lc=isLC(i)?lcTax(amount):null;
-    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:''),acts,acts.length>1||lc?9000:4000);
+    /* 기업 매출·수당이 들어오면 꼭 넣을 것을 바로 보여 준다(2026-11-10 룡). 막지 않는다: 창은 그대로 닫히고, 다 넣을 때까지 첫 화면 「넣을 것」에 남는다 */
+    const co=(F.qd[book]||{}).book==='기업'&&i.kind==='수입'&&i.bucket==='사업소득';
+    const must=co&&i.middle==='매출'?`꼭 넣기 → 부가세 칸 ${won(Math.floor(amount/11))} · 십일조 예비비 ${won(Math.floor(amount/11))}`:co&&i.middle==='수당'?`꼭 넣기 → 십일조 예비비 ${won(Math.floor(amount/10))}`:'';
+    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:'')+(must?' · '+must:''),acts,acts.length>1||lc||must?9000:4000);
     startFlow();
     await loadAll();render();
-    if(QUICK)setTimeout(closeQuick,acts.length>1?6000:1000);else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
+    if(QUICK)setTimeout(closeQuick,acts.length>1||must?6000:1000);else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
   }catch(e){toast('저장 안 됨. ('+e.message+')',[],8000)}
   st.busy=false;
 }
@@ -453,16 +456,16 @@ async function save(){
    기록할 때 어느 줄인지 고르면 그 줄 잔액이 줄고, 이달 계획의 합이 그 항목 예산이 된다 */
 const fundsOf=i=>{const d=Object.values(F.qd||{}).find(x=>(x.items||[]).some(y=>y.id===i.id))||st.data;return (d.funds||[]).filter(f=>f.item_id===i.id)};
 function fundsHtml(){
-  const fs=st.data.funds||[];if(!fs.length&&isCo())return '';
+  const fs=st.data.funds||[];   // 기업도 빚 줄을 넣을 수 있게 늘 보인다(2026-11-10 룡 「빚 항목은 반드시」)
   if(st.fdOpen===undefined)st.fdOpen=true;
   const it=id=>items().find(i=>i.id===id)||{};
-  return `<div class="fx fd"><h4 data-fd="1"><span>${st.fdOpen?'▾':'▸'} 사역비·교육비·빚</span><small>이달 계획 ${won(fs.reduce((t,f)=>t+Number(f.monthly),0))} · 잔액 ${won(fs.reduce((t,f)=>t+Number(f.balance),0))}</small></h4>`+
+  return `<div class="fx fd"><h4 data-fd="1"><span>${st.fdOpen?'▾':'▸'} ${isCo()?'빚':'사역비·교육비·빚'}</span><small>이달 계획 ${won(fs.reduce((t,f)=>t+Number(f.monthly),0))} · 잔액 ${won(fs.reduce((t,f)=>t+Number(f.balance),0))}</small></h4>`+
    (st.fdOpen?fs.map(f=>`<div class="fr"><button class="fn" data-fde="${f.id}"><span>${esc(it(f.item_id).middle||'')} · ${esc(f.name)}</span><em>${f.due?'마감 '+esc(f.due)+' · ':''}이달 계획 ${won(f.monthly)} · 이달 낸 것 ${won(f.paid)}</em></button><b>${won(f.balance)}<em style="display:block;text-align:right">/ ${won(f.start)}</em></b></div>`).join('')+`<button class="fadd" data-fda="1">＋ 줄 추가</button>`:'')+'</div>';
 }
 function editFund(id){
   const d=st.data,f=id?(d.funds||[]).find(x=>x.id===id):null;
   const its=d.items.filter(i=>i.kind==='지출');
-  const pre=f?f.item_id:(its.find(i=>i.middle==='사역비')||its[0]||{}).id;
+  const pre=f?f.item_id:(its.find(i=>i.middle===(isCo()?'빚갚기':'사역비'))||its[0]||{}).id;
   const num=v=>v?Number(v).toLocaleString('ko-KR'):'';
   $('#form').innerHTML=`<label>구분 (항목)<select id="fd-i">${its.map(i=>`<option value="${i.id}"${i.id===pre?' selected':''}>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}</option>`).join('')}</select></label>
    <label>납부처 / 갚을 곳<input id="fd-n" value="${esc(f?f.name:'')}" placeholder="예: 키르기스스탄"></label>
@@ -531,6 +534,39 @@ function payGive(id){
     st.busy=false};
   $('#dlg').classList.add('on');setTimeout(()=>$('#f-p').select(),50);
 }
+/* 넣을 것(기업, 2026-11-10 룡): 절대 빼먹으면 안 되는 두 가지. 매출마다 부가세 칸 ÷11 + 십일조 예비비 ÷11, 오레진 수당은 십일조 예비비 10%만(부가세 없음).
+   「넣었어요」 = 토스 메인에서 그 칸으로 옮긴 돈을 지출로 기록(옛 시트처럼, 앱 잔액 = 토스 메인). 칸에서 실제로 낼 때는 다시 기록하지 않는다.
+   다 넣을 때까지 첫 화면에 남는다. 나머지 고정비는 룡이 자유롭게 */
+const SET=[{k:'vat',memo:'부가세 칸',mid:'부가세'},{k:'tithe',memo:'십일조 예비비',mid:'십일조'}];
+function setList(d=st.data){
+  if(!d||d.book!=='기업')return[];
+  const it=id=>d.items.find(i=>i.id===id)||{};
+  let vat=0,tithe=0;const put={vat:0,tithe:0};
+  d.entries.forEach(e=>{const i=it(e.item_id),a=Number(e.amount);
+    if(i.kind==='수입'&&i.bucket==='사업소득'){if(i.middle==='매출'){vat+=Math.floor(a/11);tithe+=Math.floor(a/11)}else if(i.middle==='수당')tithe+=Math.floor(a/10)}
+    SET.forEach(s=>{if(i.kind==='지출'&&i.middle===s.mid&&(e.memo||'').startsWith(s.memo))put[s.k]+=a})});
+  const owe={vat,tithe};
+  return SET.map(s=>({...s,i:d.items.find(i=>i.kind==='지출'&&i.middle===s.mid),owe:owe[s.k],put:put[s.k],left:Math.max(0,owe[s.k]-put[s.k])})).filter(x=>x.owe&&x.i);
+}
+function setHtml(){
+  const g=setList();if(!g.length)return '';
+  const left=g.reduce((s,x)=>s+x.left,0);
+  return `<div class="fx give"><h4><span>📥 넣을 것${left?'':' ✓'}</span><small>이 달 매출에서 꼭</small></h4>`+g.map(x=>
+    `<div class="fr${x.left?'':' ok'}"><span>${esc(x.memo)}<em> ${won(x.owe)} 중 ${won(x.put)} 넣음</em></span><b>${x.left?won(x.left):'다 넣음'}</b>${x.left?`<button data-put="${x.k}">넣었어요</button>`:''}</div>`).join('')+'</div>';
+}
+function putSet(k){
+  const x=setList().find(v=>v.k===k);if(!x)return;
+  $('#form').innerHTML=`<label>${esc(x.memo)}에 넣은 금액 (남은 것 ${won(x.left)})<input id="f-p" inputmode="numeric" value="${x.left}"></label>
+   <div class="btns"><button type="button" id="f-c">닫기</button><button class="ok">넣었어요</button></div>`;
+  $('#f-c').onclick=closeDlg;
+  $('#form').onsubmit=async e=>{e.preventDefault();const v=Number($('#f-p').value.replace(/\D/g,''));if(!v||st.busy)return;closeDlg();st.busy=true;
+    try{const cur=st.month.slice(0,7)===today().slice(0,7);const last=ymd(new Date(Number(st.month.slice(0,4)),Number(st.month.slice(5,7)),0));
+      const eid=await rpc('fin_add',{p_date:cur?today():last,p_item:x.i.id,p_amount:v,p_memo:x.memo,p_book:st.book});
+      toast(`${x.memo} ${won(v)} 넣음`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]],4000);
+      await loadAll();render()}catch(x2){toast('저장 안 됨. ('+x2.message+')',[],8000)}
+    st.busy=false};
+  $('#dlg').classList.add('on');setTimeout(()=>$('#f-p').select(),50);
+}
 // 첫 화면(내역 위): 날짜를 정했고 그날이 지났는데 안 낸 것. 지금 고른 장부 것만(2026-11-06 룡). 이번 달일 때만
 function dueHtml(){
   if(st.month.slice(0,7)!==today().slice(0,7))return '';
@@ -587,6 +623,7 @@ function editFixed(bk,id){
 function fxClick(e){
   const b=e.target.closest('button');if(!b)return false;const d=b.dataset;
   if(d.give){payGive(d.give);return true}
+  if(d.put){putSet(d.put);return true}
   if(d.fde){editFund(d.fde);return true}
   if(d.fda){editFund(null);return true}
   if(d.f){payFixed(d.bk||st.book,d.f);return true}
@@ -606,7 +643,7 @@ function renderMonth(){
 function renderList(){
   const by={};st.data.entries.forEach(e=>(by[e.date]=by[e.date]||[]).push(e));
   const days=Object.keys(by);
-  $('#list').innerHTML=giveHtml()+dueHtml()+(days.length?days.map(d=>{
+  $('#list').innerHTML=giveHtml()+setHtml()+dueHtml()+(days.length?days.map(d=>{
     const dt=new Date(d+'T00:00');
     return `<div class="day">${dt.getMonth()+1}/${dt.getDate()} (${'일월화수목금토'[dt.getDay()]})</div>`+by[d].map(e=>{
       const i=item(e.item_id)||{};const inc=i.kind==='수입';
