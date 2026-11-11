@@ -877,7 +877,9 @@ function renderBooks(){
   el.innerHTML=bs.map(b=>`<button data-b="${b.id}" class="${b.id===st.book?'on':''}">${esc(b.name)}</button>`).join('');
 }
 $('#books').onclick=async e=>{const b=e.target.dataset.b;if(!b||b===st.book)return;st.book=b;F.bk=null;F.area=null;F.path=[];F.item=null;st.fxOpen=null;try{localStorage.setItem('fin_book',b)}catch(x){}renderBooks();st.data=F.qd[b]||st.data;render();show(st.view==='rec'?'rec':PC?'dash':'list')};
-function show(v){
+const viewTrail=[];   // 뒤로 가기용: 지나온 화면
+function show(v,back){
+  if(!back&&st.view&&st.view!==v&&st.view!=='rec'){viewTrail.push(st.view);if(viewTrail.length>20)viewTrail.shift()}
   if(v!=='rec')st.back=v;st.view=v;
   document.querySelectorAll('.scroll').forEach(x=>x.scrollTop=0);   // 어느 창이든 열면 맨 위부터(2026-11-06 룡)
   document.querySelectorAll('main').forEach(m=>m.classList.toggle('on',m.id==='v-'+v));
@@ -947,6 +949,26 @@ function unforcePw(){pwForced=false;$('#amClose').hidden=$('#pwBack').hidden=fal
 $('#menuBtn').onclick=()=>{amView('main');$('#amName').textContent=me.name+'님';$('#amBg').hidden=false};
 $('#amClose').onclick=()=>{$('#amBg').hidden=true};
 $('#amBg').onclick=e=>{if(e.target.id==='amBg'&&!pwForced)$('#amBg').hidden=true};
+/* 앱의 뒤로 가기(2026-11-11 룡: 꺼지지 말고 전 단계로): 열린 창 → 기록 중이면 앞 단계 → 직전 화면 → 첫 화면. 더 갈 데가 없을 때만 앱이 닫힌다. */
+window.appBack=()=>{
+  if(!$('#amBg').hidden){
+    if(pwForced)return true;
+    if(!$('#pwForm').hidden)amView('set');else if(!$('#amSetView').hidden)amView('main');else $('#amBg').hidden=true;
+    return true;
+  }
+  if($('#dlg').classList.contains('on')){closeDlg();return true}
+  if(!me)return false;
+  if(st.view==='rec'){
+    if(!$('#back').hidden){$('#back').click();return true}
+    if(QUICK)return false;
+    closeRec();return true;
+  }
+  const home=PC?'dash':'list';
+  if(st.view&&st.view!==home){const p=viewTrail.pop()||home;if(p===home)viewTrail.length=0;show(p,true);return true}
+  const sc=document.querySelector('main.on .scroll');
+  if(sc&&sc.scrollTop>200){sc.scrollTo({top:0,behavior:'smooth'});return true}
+  return false;
+};
 $('#amSet').onclick=()=>amView('set');
 $('#amBack').onclick=()=>amView('main');
 $('#pwBack').onclick=()=>amView('set');
