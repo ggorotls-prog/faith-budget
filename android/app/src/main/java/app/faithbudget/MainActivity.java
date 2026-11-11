@@ -130,4 +130,14 @@ public class MainActivity extends Activity {
                 .setNegativeButton("나중에", null)
                 .show();
     }
+
+    // 뒤로 가기: 사이트의 appBack(열린 창 → 직전 화면)을 먼저. 더 갈 데가 없으면 앱 닫기.
+    // (2026-11-11 룡 「만든 앱들 뒤로 가기 하면 꺼지는 게 아니라 전 단계로」, 업무·영성 기록과 같은 방식)
+    @Override
+    public void onBackPressed() {
+        web.evaluateJavascript("(function(){try{return window.appBack?appBack():false}catch(e){return false}})()", r -> {
+            if ("true".equals(r)) return;
+            super.onBackPressed();
+        });
+    }
 }
