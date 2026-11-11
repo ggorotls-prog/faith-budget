@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#f4f5f2"));
+        root.setBackgroundColor(Color.parseColor("#f6f5f1"));
         web = new WebView(this);
         // 폰의 자동 완성(삼성 패스 등)을 끈다. 다른 앱에서 로그인 칸의 키보드가 안 뜬 적이 있다(2026-10-30)
         web.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
