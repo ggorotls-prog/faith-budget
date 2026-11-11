@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        UpdateJob.schedule(getApplicationContext()); // 앱을 안 열어도 새 버전이면 알림
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#f6f5f1"));
         web = new WebView(this);
