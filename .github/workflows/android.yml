@@ -102,3 +102,9 @@ jobs:
           git commit -m "앱 새 버전 올림 (${GITHUB_RUN_NUMBER})"
           git pull --rebase -q origin main
           git push origin HEAD:main
+      # 2026-11-16 룡 「바로 실시간」: 기록 앱 폰 기능이 바뀌면 라이프 RPG도 바로 새 버전(열쇠 RPG_DISPATCH가 있을 때만. 없으면 15분 점검이 대신)
+      - name: 라이프 RPG도 바로 새 버전
+        env:
+          GH_TOKEN: ${{ secrets.RPG_DISPATCH }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then gh workflow run android.yml -R ggorotls-prog/life-rpg && echo "라이프 RPG 빌드 부름"; else echo "열쇠 없음 → 15분 점검이 대신"; fi
