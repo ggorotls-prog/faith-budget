@@ -66,6 +66,15 @@ jobs:
             if grep -q "FATAL EXCEPTION" crash.txt; then exit 1; fi
             adb shell pidof app.faithbudget || { echo "앱이 꺼져 있어요"; exit 1; }
             echo "앱이 켜져 있어요"
+            # 빠른 기록 창(위젯 − 지출과 같은 창)도 열려 보는지(2026-11-15 원본 한 벌 finkit으로 옮긴 뒤 확인)
+            adb logcat -c
+            adb shell am start -W -n app.faithbudget/.QuickActivity --es kind out
+            sleep 10
+            adb logcat -d -b crash > crash2.txt || true
+            if grep -q "FATAL EXCEPTION" crash2.txt; then cat crash2.txt; exit 1; fi
+            adb shell dumpsys activity activities | grep -E "topResumedActivity" | tee top.txt
+            grep -q "app.faithbudget/.QuickActivity" top.txt || { echo "빠른 기록 창이 안 떴어요"; exit 1; }
+            echo "빠른 기록 창 뜸"
 
   # main에서 가상 폰 확인까지 통과하면 APK를 사이트 app/에 올린다. 가족은 이 주소에서 받아 깐다.
   # 폰의 앱이 app/version.json을 보고 새 버전이면 스스로 받아서 업데이트한다(업무·영성 기록 앱과 같음).

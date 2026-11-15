@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 창·위젯 등록은 각 앱 manifest에서 한다(앱마다 클래스 이름을 지켜야 홈 화면 위젯·One hand 설정이 안 끊긴다) -->
+<manifest />

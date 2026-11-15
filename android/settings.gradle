@@ -6,3 +6,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = 'faith-budget'
 include ':app'
+// 재정 기록 폰 기능 원본(라이프 RPG도 이 폴더를 가져다 쓴다)
+include ':finkit'
