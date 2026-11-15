@@ -46,3 +46,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // 재정 기록 폰 기능 원본(화면·빠른 기록 창·위젯). 라이프 RPG와 같이 쓴다
+    implementation project(':finkit')
+}

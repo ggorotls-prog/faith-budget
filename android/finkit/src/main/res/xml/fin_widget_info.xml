@@ -9,6 +9,6 @@
     android:minResizeHeight="40dp"
     android:resizeMode="horizontal"
     android:updatePeriodMillis="0"
-    android:initialLayout="@layout/widget"
-    android:description="@string/widget_desc"
+    android:initialLayout="@layout/fin_widget"
+    android:description="@string/fin_widget_desc"
     android:widgetCategory="home_screen" />
