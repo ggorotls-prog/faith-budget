@@ -29,8 +29,10 @@ public class MainActivity extends app.recordkit.fin.FinScreen {
         // 앱을 열 때마다 새 버전이 있나 본다(업무·영성 기록 앱과 같은 방식, 2026-11-03 룡: 모든 기록 앱 동일)
         boolean retry = backFromSecurity;
         backFromSecurity = false;
+        Updater.askNotifications(this); // 알림이 꺼져 있으면 열 때마다 다시 묻기(2026-11-16)
         new Thread(() -> {
             int latest = Updater.latest(getApplicationContext());
+            if (latest > 0 && latest <= BuildConfig.VERSION_CODE) Updater.clearNotice(getApplicationContext());
             if (latest <= BuildConfig.VERSION_CODE) return;
             if (!Updater.canInstall(this)) { runOnUiThread(this::askInstallPermission); return; }
             if (retry) { Updater.checkAndInstall(getApplicationContext(), true, true); return; }
