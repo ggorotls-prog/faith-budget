@@ -78,27 +78,6 @@ public abstract class FinQuick extends Activity {
         if (web != null) web.evaluateJavascript("window.renderPend&&renderPend()", null);
     }
 
-    // 은행·카드 알림 읽기 켜는 법(카톡 기록 앱과 같은 순서: 받아 깐 앱은 「제한된 설정 허용」이 먼저)
-    private void askNotice() {
-        if (isFinishing()) return;
-        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
-                .setTitle("은행·카드 알림이 오면 묻기")
-                .setMessage("입금·출금·결제 알림이 뜨면 「기록할까요?」를 물어요.\n\n"
-                        + "1. 「켜러 가기」 → 목록에서 「재정 기록 (은행·카드 알림 → 기록할까요?)」을 켜요.\n"
-                        + "2. 회색이라 안 눌리면 「앱 정보」 → 오른쪽 위 ⋮ → 「제한된 설정 허용」을 누르고 다시 1번.\n\n"
-                        + "알림에서 금액·가게 이름만 읽어요. 계좌번호·잔액은 저장하지 않아요.")
-                .setPositiveButton("켜러 가기", (d, w) -> {
-                    try { startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); } catch (Exception ignored) {}
-                })
-                .setNeutralButton("앱 정보", (d, w) -> {
-                    try {
-                        startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
-                    } catch (Exception ignored) {}
-                })
-                .setNegativeButton("닫기", null)
-                .show();
-    }
-
     class Bridge {
         @JavascriptInterface
         public void close() { runOnUiThread(FinQuick.this::finish); }
@@ -126,6 +105,6 @@ public abstract class FinQuick extends Activity {
         public String noticeState() { return FinNotice.state(getApplicationContext()); }
 
         @JavascriptInterface
-        public void noticeSetup() { runOnUiThread(FinQuick.this::askNotice); }
+        public void noticeSetup() { runOnUiThread(() -> FinNoticeSetup.show(FinQuick.this)); }
     }
 }

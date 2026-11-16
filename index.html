@@ -225,6 +225,7 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
   <div class="am">
     <div class="am-head"><strong id="amName"></strong><button type="button" class="am-x" id="amClose" aria-label="닫기">✕</button></div>
     <div id="amMain">
+      <button type="button" class="am-item" id="amNotice" hidden><span>🔔 은행·카드 알림 켜기</span><small>알림이 오면 「기록할까요?」</small></button>
       <button type="button" class="am-item" id="amSet"><span>⚙️ 설정</span><span class="am-go">›</span></button>
       <button type="button" class="am-item danger" id="amOut"><span>로그아웃</span><small>이 앱의 모든 기기에서 나가져요</small></button>
     </div>
@@ -1010,6 +1011,8 @@ window.appBack=()=>{
 $('#amSet').onclick=()=>amView('set');
 $('#amBack').onclick=()=>amView('main');
 $('#pwBack').onclick=()=>amView('set');
+// 앱에서만: 내 은행·카드 앱 알림 켜기 창(폰 기능). 빠른 기록 창은 위 「🔔 켜기」 줄이 같은 창을 연다
+if(window.AndroidFin&&AndroidFin.noticeSetup){$('#amNotice').hidden=false;$('#amNotice').onclick=()=>AndroidFin.noticeSetup()}
 $('#amPw').onclick=()=>{$('#pwForm').reset();$('#pwErr').textContent='';amView('pw')};
 $('#amOut').onclick=async()=>{await rpc('fin_logout_all',{}).catch(()=>{});logout()};
 $('#pwForm').onsubmit=async e=>{

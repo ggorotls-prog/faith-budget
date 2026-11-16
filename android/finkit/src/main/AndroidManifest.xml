@@ -3,6 +3,13 @@
      은행·카드 알림 읽기(2026-11-16 룡 「알림이 뜨면 기록할까요?」)만 여기서 등록한다: 재정 기록 앱·라이프 RPG에 똑같이 들어간다 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 「은행·카드 알림 켜기」 창: 폰에 깔린 은행·카드 앱을 찾으려고(안드로이드 11+는 적어 둬야 보인다) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <application>
         <!-- 은행·카드 알림 읽기. 알림을 지우거나 누르지 않는다. 금액·종류·짧은 이름만 읽는다 -->
         <service
