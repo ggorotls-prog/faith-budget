@@ -21,7 +21,26 @@ public abstract class FinWidget extends AppWidgetProvider {
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.fin_widget);
         v.setOnClickPendingIntent(R.id.fin_out, open(ctx, quick(), "지출", 1));
         v.setOnClickPendingIntent(R.id.fin_in, open(ctx, quick(), "수입", 2));
+        // 은행·카드 알림에서 온 「안 적은 것」이 남아 있으면 빨간 표. 누르면 빠른 기록 창 위에 그 건들이 뜬다
+        int n = FinPending.count(ctx);
+        v.setViewVisibility(R.id.fin_badge, n > 0 ? android.view.View.VISIBLE : android.view.View.GONE);
+        v.setTextViewText(R.id.fin_badge, "안 적은 것 " + n);
+        v.setOnClickPendingIntent(R.id.fin_badge, open(ctx, quick(), "지출", 3));
         return v;
+    }
+
+    /** 「안 적은 것」 수가 바뀌면 이 앱의 재정 위젯을 다시 그린다 */
+    public static void refresh(Context ctx) {
+        try {
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            for (android.appwidget.AppWidgetProviderInfo info : mgr.getInstalledProvidersForPackage(ctx.getPackageName(), null)) {
+                Class<?> k = Class.forName(info.provider.getClassName());
+                if (!FinWidget.class.isAssignableFrom(k)) continue;
+                FinWidget w = (FinWidget) k.getDeclaredConstructor().newInstance();
+                int[] ids = mgr.getAppWidgetIds(info.provider);
+                if (ids.length > 0) w.onUpdate(ctx, mgr, ids);
+            }
+        } catch (Exception ignored) {}
     }
 
     /** 빠른 기록 창을 여는 인텐트(위젯 버튼·라이프 RPG 지갑 버튼이 같이 쓴다) */

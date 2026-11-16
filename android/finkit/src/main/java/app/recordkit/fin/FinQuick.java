@@ -20,6 +20,8 @@ import android.widget.FrameLayout;
 // 위젯 − 지출 / + 수입 버튼은 EXTRA_KIND로 종류를 정해 연다.
 public abstract class FinQuick extends Activity {
     public static final String EXTRA_KIND = "kind";
+    /** 「기록할까요?」 알림에서 열렸을 때 그 건의 번호(FinPending id) */
+    public static final String EXTRA_PENDING = "pending";
 
     protected WebView web;
 
@@ -69,8 +71,61 @@ public abstract class FinQuick extends Activity {
         root.postDelayed(() -> setFinishOnTouchOutside(true), 1000);
     }
 
+    // 알림 읽기를 켜고 돌아오면 「켜기」 줄이 바로 사라지게
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) web.evaluateJavascript("window.renderPend&&renderPend()", null);
+    }
+
+    // 은행·카드 알림 읽기 켜는 법(카톡 기록 앱과 같은 순서: 받아 깐 앱은 「제한된 설정 허용」이 먼저)
+    private void askNotice() {
+        if (isFinishing()) return;
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+                .setTitle("은행·카드 알림이 오면 묻기")
+                .setMessage("입금·출금·결제 알림이 뜨면 「기록할까요?」를 물어요.\n\n"
+                        + "1. 「켜러 가기」 → 목록에서 「재정 기록 (은행·카드 알림 → 기록할까요?)」을 켜요.\n"
+                        + "2. 회색이라 안 눌리면 「앱 정보」 → 오른쪽 위 ⋮ → 「제한된 설정 허용」을 누르고 다시 1번.\n\n"
+                        + "알림에서 금액·가게 이름만 읽어요. 계좌번호·잔액은 저장하지 않아요.")
+                .setPositiveButton("켜러 가기", (d, w) -> {
+                    try { startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); } catch (Exception ignored) {}
+                })
+                .setNeutralButton("앱 정보", (d, w) -> {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                    } catch (Exception ignored) {}
+                })
+                .setNegativeButton("닫기", null)
+                .show();
+    }
+
     class Bridge {
         @JavascriptInterface
         public void close() { runOnUiThread(FinQuick.this::finish); }
+
+        // ── 은행·카드 알림에서 온 「안 적은 것」(2026-11-16). 금액·이름은 주소에 싣지 않고 여기로만 넘긴다 ──
+        /** 안 적은 것 목록: [{id, kind, amount, name, t}] */
+        @JavascriptInterface
+        public String pending() { return FinPending.listJson(getApplicationContext()); }
+
+        /** 알림을 눌러 열렸으면 그 건의 번호, 아니면 "" */
+        @JavascriptInterface
+        public String picked() {
+            long id = getIntent().getLongExtra(EXTRA_PENDING, 0);
+            return id == 0 ? "" : String.valueOf(id);
+        }
+
+        /** 기록했거나 「안 함」: 그 건을 치운다 */
+        @JavascriptInterface
+        public void pendingDone(String id) {
+            try { FinAsk.done(getApplicationContext(), Long.parseLong(id)); } catch (Exception ignored) {}
+        }
+
+        /** on · other(다른 기록 앱이 읽는 중) · off */
+        @JavascriptInterface
+        public String noticeState() { return FinNotice.state(getApplicationContext()); }
+
+        @JavascriptInterface
+        public void noticeSetup() { runOnUiThread(FinQuick.this::askNotice); }
     }
 }

@@ -31,7 +31,7 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: gradle -p android assembleRelease --no-daemon
+        run: gradle -p android :finkit:testReleaseUnitTest assembleRelease --no-daemon   # 알림 글자 읽기 시험(FinParseTest)도 같이
       - uses: actions/upload-artifact@v4
         with:
           name: faith-budget-apk
@@ -75,6 +75,40 @@ jobs:
             adb shell dumpsys activity activities | grep -E "topResumedActivity" | tee top.txt
             grep -q "app.faithbudget/.QuickActivity" top.txt || { echo "빠른 기록 창이 안 떴어요"; exit 1; }
             echo "빠른 기록 창 뜸"
+            # 은행·카드 알림 → 「기록할까요?」(2026-11-16): 알림 읽기를 켜고 가짜 결제 알림을 띄워 우리 알림이 뜨는지 본다
+            adb shell cmd notification allow_listener app.faithbudget/app.recordkit.fin.FinNotice
+            adb shell pm grant app.faithbudget android.permission.POST_NOTIFICATIONS
+            sleep 5
+            adb logcat -c
+            adb shell "cmd notification post -t 'TestBank' finpay1 'Cafe 5,600원 결제 잔액 123,456원'"
+            adb shell "cmd notification post -t 'TestBank' finad1 '(광고) 9,900원 쿠폰 받았어요'"
+            sleep 8
+            adb shell dumpsys notification --noredact > noti.txt
+            adb logcat -d -b crash > crash3.txt || true
+            if grep -q "FATAL EXCEPTION" crash3.txt; then cat crash3.txt; exit 1; fi
+            grep -a "기록할까요" noti.txt | head -5 || true
+            grep -a -q "5,600원 지출" noti.txt || { echo "「기록할까요?」 알림이 안 떴어요"; grep -a -n "faithbudget" noti.txt | head -20; exit 1; }
+            if grep -a -q "9,900원" noti.txt && grep -a "9,900원" noti.txt | grep -a -q "지출\|수입"; then echo "광고 알림을 잡았어요"; exit 1; fi
+            echo "기록할까요 알림 뜸"
+            # 알림을 눌렀을 때 열리는 창(안 적은 것이 채워진 빠른 기록 창)도 죽지 않는지
+            adb logcat -c
+            adb shell cmd statusbar expand-notifications
+            sleep 3
+            adb exec-out screencap -p > ask.png || true
+            adb shell cmd statusbar collapse
+            adb shell am start -W -n app.faithbudget/.QuickActivity --es kind out
+            sleep 10
+            adb exec-out screencap -p > quick.png || true
+            adb logcat -d -b crash > crash4.txt || true
+            if grep -q "FATAL EXCEPTION" crash4.txt; then cat crash4.txt; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-shots
+          path: |
+            ask.png
+            quick.png
+          if-no-files-found: ignore
 
   # main에서 가상 폰 확인까지 통과하면 APK를 사이트 app/에 올린다. 가족은 이 주소에서 받아 깐다.
   # 폰의 앱이 app/version.json을 보고 새 버전이면 스스로 받아서 업데이트한다(업무·영성 기록 앱과 같음).

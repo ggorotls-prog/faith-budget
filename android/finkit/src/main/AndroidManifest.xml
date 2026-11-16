@@ -1,3 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 창·위젯 등록은 각 앱 manifest에서 한다(앱마다 클래스 이름을 지켜야 홈 화면 위젯·One hand 설정이 안 끊긴다) -->
-<manifest />
+<!-- 창·위젯 등록은 각 앱 manifest에서 한다(앱마다 클래스 이름을 지켜야 홈 화면 위젯·One hand 설정이 안 끊긴다).
+     은행·카드 알림 읽기(2026-11-16 룡 「알림이 뜨면 기록할까요?」)만 여기서 등록한다: 재정 기록 앱·라이프 RPG에 똑같이 들어간다 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application>
+        <!-- 은행·카드 알림 읽기. 알림을 지우거나 누르지 않는다. 금액·종류·짧은 이름만 읽는다 -->
+        <service
+            android:name="app.recordkit.fin.FinNotice"
+            android:exported="true"
+            android:label="재정 기록 (은행·카드 알림 → 기록할까요?)"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <!-- 「기록할까요?」 알림의 「안 함」 버튼 · 업데이트 뒤 알림 읽기 다시 붙이기 -->
+        <receiver android:name="app.recordkit.fin.FinAsk" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
