@@ -117,6 +117,13 @@ nav button.on{color:var(--main)}
 #fab button{width:58px;height:58px;border-radius:50%;color:#fff;font-size:30px;font-weight:700;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.22)}
 #fab #fabIn{background:#1B62B5}#fab #fabOut{background:#1F6F54}
 #recClose{font-size:20px;color:var(--sub);padding:6px 10px}
+/* 은행·카드 알림에서 온 「안 적은 것」(빠른 기록 창 위, 2026-11-16 룡) */
+#pend{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 12px 0;align-items:center;white-space:nowrap}
+#pend b{font-size:13px;color:var(--bad);flex:none}
+#pend .pd{display:inline-flex;flex:none;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:14px;overflow:hidden}
+#pend .pd.on{border-color:var(--main);box-shadow:inset 0 0 0 1px var(--main)}
+#pend .pd button{padding:7px 4px 7px 12px;font-weight:600}
+#pend .pd button+button{padding:7px 10px 7px 6px;color:var(--sub);font-weight:400}
 .pc #fab{bottom:24px;right:24px}
 #v-list .scroll,#v-bud .scroll{padding-bottom:150px}
 .fx{margin:0 12px 8px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -243,6 +250,7 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
     <button id="recClose" aria-label="닫기">✕</button><div class="seg" id="kindSeg"><button id="k-in" class="in">수입</button><button id="k-out" class="on">지출</button></div>
     <label class="date"><span id="dateLbl"></span><input type="date" id="date" aria-label="날짜"></label>
   </div>
+  <div id="pend" hidden></div>
   <div class="fh"><button id="back" aria-label="뒤로" hidden>‹</button><div id="crumb"></div></div>
   <div id="flow" class="scroll"></div>
   <div id="pay" hidden>
@@ -340,7 +348,7 @@ const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</b
 const LV=['bucket','middle','detail'];
 const myBooks=()=>[...new Set(scopes().map(s=>bookName(s.book)))].filter(b=>scopes().some(s=>bookName(s.book)===b&&itemsOf(s).length));
 const coScopes=()=>scopes().filter(s=>bookName(s.book)==='기업'&&itemsOf(s).length);
-function startFlow(){F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
+function startFlow(){F.pid=null;F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
   // 위젯은 가정|기업을 늘 묻고, 앱은 위쪽 가정|기업 버튼에서 고른 장부를 그대로 쓴다(2026-11-06 룡)
@@ -397,8 +405,33 @@ function renderFlow(){
     $('#fundPick').innerHTML=fs.length?`<h5 style="margin:6px 12px 4px">어디에 낸 돈?</h5><div class="row" style="padding:0 12px 8px">${fs.map(f=>`<button class="chip${F.fund===f.id?' fav':''}" data-fund="${f.id}">${esc(f.name)}</button>`).join('')}<button class="chip${!F.fund?' fav':''}" data-fund="">해당 없음</button></div>`:'';
     if(!fs.length)setTimeout(()=>$('#memo').focus(),50);
   }
-  renderAlert();
+  renderAlert();renderPend();
 }
+/* 은행·카드 알림에서 온 「안 적은 것」(2026-11-16 룡: 알림이 뜨면 「기록할까요?」, 안 적은 것은 치울 때까지 보이게).
+   폰 앱이 알림에서 종류·금액·짧은 이름만 뽑아 넘긴다(Android.pending). 고르면 금액·메모가 채워지고 「어디 돈?」부터 고른다.
+   저장하거나 ✕(안 함)하면 치워진다. 앱의 빠른 기록 창에서만 보인다 */
+const AP=QUICK&&window.Android&&Android.pending?Android:null;
+const pendList=()=>{try{return AP?JSON.parse(AP.pending()||'[]'):[]}catch(e){return[]}};
+function pendApply(p){
+  st.kind=p.kind==='수입'?'수입':'지출';$('#k-out').classList.toggle('on',st.kind==='지출');$('#k-in').classList.toggle('on',st.kind==='수입');
+  startFlow();st.amount=String(p.amount);$('#memo').value=p.name||'';F.pid=String(p.id);renderFlow();
+}
+function renderPend(){
+  const el=$('#pend');if(!el)return;if(!AP){el.hidden=true;return}
+  const ps=pendList();let h='';
+  if(ps.length)h=`<b>안 적은 것 ${ps.length}</b>`+ps.map(p=>`<span class="pd${F.pid===String(p.id)?' on':''}"><button data-pd="${p.id}">${p.kind==='수입'?'＋':'−'}${won(p.amount)}${p.name?' '+esc(p.name):''}</button><button data-px="${p.id}" aria-label="안 함">✕</button></span>`).join('');
+  else{let s='',hide=null;try{s=AP.noticeState()}catch(e){}try{hide=localStorage.getItem('fin_notice_hide')}catch(e){}
+    if(s==='off'&&!hide)h=`<span class="pd"><button data-pon="1">🔔 은행·카드 알림 오면 묻기 · 켜기</button><button data-phide="1" aria-label="숨기기">✕</button></span>`}
+  el.innerHTML=h;el.hidden=!h;
+}
+$('#pend').onclick=e=>{
+  const b=e.target.closest('button');if(!b||!AP)return;const d=b.dataset;
+  if(d.pd){const p=pendList().find(x=>String(x.id)===d.pd);if(p){pendApply(p);return}}
+  else if(d.px){AP.pendingDone(d.px);if(F.pid===d.px){startFlow();return}}
+  else if(d.pon)AP.noticeSetup();
+  else if(d.phide){try{localStorage.setItem('fin_notice_hide','1')}catch(x){}}
+  renderPend();
+};
 $('#flow').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(d.no){toast(d.no+' 장부는 결제권이 있는 사람만 기록해요',[],2500);return}
@@ -434,9 +467,10 @@ $('#memo').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save()}};
 async function save(){
   const i=F.item,sc=scopeOf(F.area);if(!i||!sc||st.busy)return;
   st.busy=true;
-  const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date,book=sc.book;
+  const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date,book=sc.book,pid=F.pid;
   try{
     const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book,p_fund:fundsOf(i).some(f=>f.id===F.fund)?F.fund:null});
+    if(pid&&AP)AP.pendingDone(pid);   // 은행 알림에서 온 건이면 「안 적은 것」에서 치운다
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]];
     if(i.kind==='수입'&&TITHE.includes(i.middle)){
       const t=Math.ceil(amount/10),ti=(F.qd[book].items||[]).find(x=>x.middle==='십일조(10%)');
@@ -449,7 +483,7 @@ async function save(){
     toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:'')+(must?' · '+must:''),acts,acts.length>1||lc||must?9000:4000);
     startFlow();
     await loadAll();render();
-    if(QUICK)setTimeout(closeQuick,acts.length>1||must?6000:1000);else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
+    if(QUICK){if(!pendList().length)setTimeout(closeQuick,acts.length>1||must?6000:1000)}else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
   }catch(e){toast('저장 안 됨. ('+e.message+')',[],8000)}
   st.busy=false;
 }
@@ -911,6 +945,8 @@ function setup(){
   st.data=F.qd[st.book]||Object.values(F.qd)[0];
   renderBooks();
   $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(QUICK?'rec':PC?'dash':'list');if(QUICK)$('#kindSeg').hidden=$('#recClose').hidden=true;setKind(st.kind);
+  // 「기록할까요?」 알림을 눌러 열렸으면 그 건의 금액·메모를 채운다
+  if(AP){let id='';try{id=AP.picked()}catch(x){}const p=id&&pendList().find(x=>String(x.id)===id);if(p)pendApply(p)}
 }
 async function enter(){
   const c=cacheGet();let shown=false;
