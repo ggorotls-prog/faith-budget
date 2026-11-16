@@ -103,6 +103,7 @@ jobs:
             if grep -q "FATAL EXCEPTION" crash4.txt; then cat crash4.txt; exit 1; fi
             # 「은행·카드 알림 켜기」 창(메뉴에서 여는 것과 같은 창)도 죽지 않는지: 시험용 표시를 붙여 연다
             adb logcat -c
+            adb shell am force-stop app.faithbudget
             adb shell am start -W -n app.faithbudget/.MainActivity --ez notice_setup true
             sleep 8
             adb exec-out screencap -p > setup.png || true
