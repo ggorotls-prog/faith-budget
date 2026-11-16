@@ -90,14 +90,15 @@ public final class FinParse {
 
     // 이름: 금액·번호·날짜·은행 낱말을 다 걷어 내고 남은 첫 낱말 한두 개(12자까지). 엄청 간단하게만(룡).
     private static final Pattern JUNK = Pattern.compile(
-            "(잔액|잔고|누적|한도)\\s*[:：]?\\s*[\\d,]+\\s*원?|\\[Web발신\\]|\\d{1,4}만\\s*[\\d,]*\\s*원|[\\d,]+\\s*원"
+            "(잔액|잔고|누적|한도)\\s*[:：]?\\s*[\\d,]+\\s*원?|\\[Web발신\\]|\\d{1,4}만\\s*[\\d,]*\\s*원[을이은]?|[\\d,]+\\s*원[을이은]?"
                     + "|\\d{1,2}[/.]\\d{1,2}|\\d{1,2}:\\d{2}|[\\d*\\-]{4,}");
     private static final String[] STOP = {"입금", "출금", "결제", "승인", "이체", "송금", "완료", "일시불", "잔액", "누적", "통장", "계좌",
             "카드", "은행", "뱅크", "토스", "신한", "카카오", "국민", "농협", "우리", "하나", "기업", "됐어요", "했어요", "보냈", "받았",
             "들어왔", "나갔", "되었습니다", "됐습니다", "했습니다", "내역", "알림", "안내", "체크", "신용", "사용", "납부", "인출", "해외", "국내",
             "SOL", "KB", "NH", "IBK", "원"};
     private static final Pattern TAIL = Pattern.compile("(님이|님에게|님께|님으로부터|님|에게|에서|으로부터|으로|로부터)$");
-    private static final Pattern ONLY_MARKS = Pattern.compile("^[\\d*\\-.~]*$");
+    private static final Pattern HAS_LETTER = Pattern.compile("[가-힣A-Za-z]");
+    private static final Pattern ONLY_MARKS =Pattern.compile("^[\\d*\\-.~]*$");
 
     static String nameOf(String title, String text) {
         String n = pick(text);
@@ -111,7 +112,7 @@ public final class FinParse {
         List<String> keep = new ArrayList<>();
         for (String tok : s.split("[\\s,·|/()\\[\\]:：!?。.]+")) {
             String t = TAIL.matcher(tok.trim()).replaceAll("");
-            if (t.isEmpty() || ONLY_MARKS.matcher(t).matches()) continue;
+            if (t.isEmpty() || ONLY_MARKS.matcher(t).matches() || !HAS_LETTER.matcher(t).find() || t.equals("내")) continue;
             boolean stop = false;
             for (String w : STOP) if (t.contains(w)) { stop = true; break; }
             if (stop) continue;
