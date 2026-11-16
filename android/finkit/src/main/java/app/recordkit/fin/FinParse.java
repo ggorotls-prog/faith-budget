@@ -35,6 +35,13 @@ public final class FinParse {
         // 카톡: 카카오페이·카드사·은행 알림톡만(대화방은 안 본다)
         if (p.equals("com.kakao.talk")) return TALK_SENDER.matcher(t).find();
         if (p.equals("com.android.shell")) return true;   // 가상 폰 시험(adb로 띄운 알림)
+        return isMoneyPkg(p);
+    }
+
+    /** 은행·카드·페이 앱인가(앱 이름표에 그 낱말이 있나). 「은행·카드 알림 켜기」 창의 앱 목록도 이걸 쓴다 */
+    public static boolean isMoneyPkg(String pkg) {
+        if (pkg == null) return false;
+        String p = pkg.toLowerCase(Locale.ROOT);
         for (String m : MONEY) if (p.contains(m)) return true;
         return false;
     }

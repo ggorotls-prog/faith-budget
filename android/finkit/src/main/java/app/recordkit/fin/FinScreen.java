@@ -53,6 +53,11 @@ public abstract class FinScreen extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        // 사이트 메뉴 「🔔 은행·카드 알림 켜기」가 부른다(2026-11-16 룡: 앱에서 내가 쓰는 앱 알림을 켤 수 있게)
+        web.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void noticeSetup() { runOnUiThread(() -> FinNoticeSetup.show(FinScreen.this)); }
+        }, "AndroidFin");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -77,6 +82,8 @@ public abstract class FinScreen extends Activity {
         });
 
         web.loadUrl(BASE);
+        // 가상 폰 시험·바로 가기: 이 표시를 붙여 열면 「은행·카드 알림 켜기」 창부터 뜬다
+        if (getIntent().getBooleanExtra("notice_setup", false)) root.post(() -> FinNoticeSetup.show(this));
     }
 
     // 앱으로 돌아오면 사이트를 새로 불러온다(다른 데서 적은 것이 바로 보이게)

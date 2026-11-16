@@ -101,6 +101,13 @@ jobs:
             adb exec-out screencap -p > quick.png || true
             adb logcat -d -b crash > crash4.txt || true
             if grep -q "FATAL EXCEPTION" crash4.txt; then cat crash4.txt; exit 1; fi
+            # 「은행·카드 알림 켜기」 창(메뉴에서 여는 것과 같은 창)도 죽지 않는지: 시험용 표시를 붙여 연다
+            adb logcat -c
+            adb shell am start -W -n app.faithbudget/.MainActivity --ez notice_setup true
+            sleep 8
+            adb exec-out screencap -p > setup.png || true
+            adb logcat -d -b crash > crash5.txt || true
+            if grep -q "FATAL EXCEPTION" crash5.txt; then cat crash5.txt; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -108,6 +115,7 @@ jobs:
           path: |
             ask.png
             quick.png
+            setup.png
           if-no-files-found: ignore
 
   # main에서 가상 폰 확인까지 통과하면 APK를 사이트 app/에 올린다. 가족은 이 주소에서 받아 깐다.
