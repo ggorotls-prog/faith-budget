@@ -18,3 +18,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // 알림 글자 읽기(FinParse) 시험. 앱에는 안 들어간다
+    testImplementation 'junit:junit:4.13.2'
+}
