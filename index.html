@@ -85,7 +85,15 @@ nav button.on{color:var(--main)}
 .am-item.danger{color:var(--bad)}
 .am-back{color:var(--sub);font-size:14px;min-height:32px;padding:4px 2px}
 .f{display:grid;gap:4px;font-size:13px;color:var(--sub);margin-bottom:10px;text-align:left}
-.f input{font:inherit;color:var(--ink);padding:11px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff}
+.f input,.f select{font:inherit;color:var(--ink);padding:11px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff}
+a.am-item{color:inherit;text-decoration:none}
+/* 로그인 아래 도움말·앱으로 받기(2026-11-17 룡: 앱만 쓰는 사람이 혼자) */
+#auth .help{max-width:360px;margin:12px auto 0;font-size:14px;text-align:left}
+#auth details{max-width:360px;margin:12px auto 0;background:var(--card);border-radius:14px;padding:12px 16px;text-align:left;font-size:14px}
+#auth summary{font-weight:700;cursor:pointer}
+#auth ol{margin:8px 0;padding-left:20px;color:var(--sub)}
+#auth details small{display:block;margin-top:10px;color:var(--sub);line-height:1.5}
+a.main-btn{display:block;text-align:center;text-decoration:none}
 .err{color:var(--bad);font-size:14px;min-height:20px;margin-bottom:6px;text-align:left}
 .main-btn{width:100%;padding:13px;border-radius:10px;font-weight:700;background:var(--main);color:#fff}
 .main-btn:disabled{opacity:.5}
@@ -231,8 +239,11 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
     </div>
     <div id="amSetView" hidden>
       <button type="button" class="am-back" id="amBack">‹ 처음으로</button>
+      <button type="button" class="am-item" id="amItems"><span>항목 관리</span><small>더하기·이름 바꾸기·숨기기</small></button>
       <button type="button" class="am-item" id="amPw"><span>비밀번호 바꾸기</span><span class="am-go">›</span></button>
+      <a class="am-item" id="amApp" href="app/faith-budget.apk" hidden><span>📱 앱으로 받기</span><small>안드로이드 · 받은 파일을 열어 설치</small></a>
     </div>
+    <div id="imView" hidden></div>
     <form id="pwForm" hidden>
       <button type="button" class="am-back" id="pwBack">‹ 설정으로</button>
       <p id="pwMust" style="font-size:14px;color:var(--sub)" hidden>처음 비밀번호예요. 나만 아는 새 비밀번호로 바꿔 주세요. 바꾼 비밀번호는 다른 사람이 알 수 없어요.</p>
@@ -325,6 +336,12 @@ function toast(text,actions=[],ms=5000){
   actions.forEach(([l,f])=>{const b=document.createElement('button');b.textContent=l;b.onclick=()=>{t.classList.remove('on');f()};t.append(b)});
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),ms);
 }
+/* 오류 글(2026-11-17 룡): 날것 오류는 console에만. 화면에는 우리말 안내(서버가 보낸 우리말 이유는 그대로) */
+const HELP='다시 눌러 주세요. 계속 안 되면 관리자에게 말해 주세요.';
+function errText(e,head='저장이 안 됐어요.'){console.error(e);const m=String(e&&e.message||'');return /[가-힣]/.test(m)&&m.length<80?m:head+' '+HELP}
+const fail=(e,head)=>toast(errText(e,head),[],8000);
+const IN_APP=!!(window.Android||window.AndroidFin);
+const NO_SCOPE='기록하려면 관리자에게 「기록 권한(결제권)을 주세요」라고 말해 주세요.';
 
 /* 기록: 앱·위젯 똑같이 한 길, 한 화면에 하나씩 (2026-11-04 룡: 앱시트처럼 단순하게)
    지출|수입 → 금액 → 영역(결제권 있는 것만: 가정·청소·포멘토·그린주의·오레진·기업 공통) → 항목 → 메모 → 저장 */
@@ -338,7 +355,8 @@ async function loadAll(){
 }
 const bookName=id=>((me.books||[]).find(b=>b.id===id)||{}).name||'';
 // 내 영역: scopes(book, area) → 이름. 가정 장부는 「가정」, 기업 area ''는 「기업 공통」
-const scopes=()=>(me.scopes||[]).map(s=>({book:s.book,area:s.area,name:bookName(s.book)==='가정'?'가정':(s.area||'기업 공통')}));
+// 그 밖의 장부(라이프 RPG로 가입한 사람의 「○○ 장부」)는 area ''를 장부 이름으로 부른다(2026-11-17)
+const scopes=()=>(me.scopes||[]).map(s=>{const bn=bookName(s.book);return{book:s.book,area:s.area,name:bn==='가정'?'가정':bn==='기업'?(s.area||'기업 공통'):(s.area||bn)}});
 const scopeOf=name=>scopes().find(s=>s.name===name);
 const itemsOf=sc=>((F.qd[sc.book]||{}).items||[]).filter(i=>i.kind===st.kind&&(i.area||'')===sc.area);
 const itemName=i=>isWeek(i)?'식비':(i.detail?i.middle+' · '+i.detail:i.middle);
@@ -348,12 +366,13 @@ const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</b
    고를 것이 하나뿐인 칸은 저절로 넘어간다(식비 주차는 날짜로) */
 const LV=['bucket','middle','detail'];
 const myBooks=()=>[...new Set(scopes().map(s=>bookName(s.book)))].filter(b=>scopes().some(s=>bookName(s.book)===b&&itemsOf(s).length));
-const coScopes=()=>scopes().filter(s=>bookName(s.book)==='기업'&&itemsOf(s).length);
-function startFlow(){F.pid=null;F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
+const coScopes=(bk=F.bk||'기업')=>scopes().filter(s=>bookName(s.book)===bk&&itemsOf(s).length);
+function startFlow(){if(F.pid){st.date=today();renderDate()}F.pid=null;F.last=null;F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
   // 위젯은 가정|기업을 늘 묻고, 앱은 위쪽 가정|기업 버튼에서 고른 장부를 그대로 쓴다(2026-11-06 룡)
-  if(!F.bk){if(QUICK||!st.book)return;F.bk=bookName(st.book);F.bkAuto=true}
+  // 장부가 하나뿐이면 묻지 않는다(2026-11-17: 라이프 RPG로 가입한 사람은 자기 장부 하나)
+  if(!F.bk){const mb=myBooks();if(mb.length===1&&(me.books||[]).length===1){F.bk=mb[0];F.bkAuto=true}else{if(QUICK||!st.book)return;F.bk=bookName(st.book);F.bkAuto=true}}
   if(!myBooks().includes(F.bk))return;
   if(!F.area){
     if(F.bk==='가정')F.area='가정';
@@ -377,7 +396,12 @@ function renderDate(){
   $('#dateLbl').textContent=(st.date===today()?'오늘 ':'')+`${d.getMonth()+1}/${d.getDate()} (${'일월화수목금토'[d.getDay()]})`;
   $('#date').value=st.date;
 }
-function setKind(k){st.kind=k;$('#k-out').classList.toggle('on',k==='지출');$('#k-in').classList.toggle('on',k==='수입');startFlow()}
+function setKind(k){
+  // 알림에서 온 건이면 수입↔지출만 바꾸고 금액·메모·지난 항목은 둔다(2026-11-17: 알림이 종류를 잘못 읽었을 때)
+  const keep=F.pid?{a:st.amount,m:$('#memo').value,pid:F.pid,last:F.last}:null;
+  st.kind=k;$('#k-out').classList.toggle('on',k==='지출');$('#k-in').classList.toggle('on',k==='수입');startFlow();
+  if(keep){st.amount=keep.a;$('#memo').value=keep.m;F.pid=keep.pid;F.last=keep.last;renderFlow()}
+}
 function renderFlow(){
   if(!st.data)return;
   const my=scopes();
@@ -390,15 +414,17 @@ function renderFlow(){
   if(F.item){const n=isLC(F.item)?'수당 (통장에 들어온 돈)':isWeek(F.item)?'식비':(F.item.detail||F.item.middle);if(crumb[crumb.length-1]!==n&&!(isWeek(F.item)&&crumb[crumb.length-1]==='식비'))crumb.push(n)}
   $('#crumb').textContent=crumb.join(' › ');
   let h='';
-  if(step==='none')h=`<p class="none">기록은 결제권이 있는 사람만 해요. 내역·손익은 볼 수 있어요.</p>`;
-  else if(step==='nobook')h=`<p class="none">${esc(F.bk)} 장부는 결제권이 있는 사람만 기록해요.<br>위에서 다른 장부를 골라 주세요.</p>`;
-  else if(step==='book'){const ok=myBooks();h=`<h4>어디 돈?</h4><div class="bb two">${['가정','기업'].map(b=>ok.includes(b)?bigBtn(`data-bk="${esc(b)}"`,b):`<button class="off" data-no="${b}">${b}<small>결제권 없음</small></button>`).join('')}</div>`}
-  else if(step==='area')h=`<h4>기업 어느 영역?</h4><div class="bb two">${coScopes().map(s=>bigBtn(`data-area="${esc(s.name)}"`,s.name)).join('')}</div>`;
+  if(step==='none')h=`<p class="none">기록은 결제권이 있는 사람만 해요. 내역·손익은 볼 수 있어요.<br>${NO_SCOPE}</p>`;
+  else if(step==='nobook')h=`<p class="none">${esc(F.bk)} 장부는 결제권이 있는 사람만 기록해요.<br>위에서 다른 장부를 골라 주세요.<br>${NO_SCOPE}</p>`;
+  else if(step==='book'){const ok=myBooks(),all=[...new Set([...(me.books||[]).map(b=>b.name),...ok])];h=`<h4>어디 돈?</h4><div class="bb two">${all.map(b=>ok.includes(b)?bigBtn(`data-bk="${esc(b)}"`,b):`<button class="off" data-no="${esc(b)}">${esc(b)}<small>결제권 없음</small></button>`).join('')}</div>`}
+  else if(step==='area')h=`<h4>${esc(F.bk)} 어느 영역?</h4><div class="bb two">${coScopes().map(s=>bigBtn(`data-area="${esc(s.name)}"`,s.name)).join('')}</div>`;
   else if(step==='pick'){const r=resolve();
     const title={bucket:'대분류',middle:'중분류',detail:'소분류'}[r.lv];
     h=`<h4>${title}</h4><div class="bb two">${r.opts.map(o=>{const one=r.c.filter(i=>(i[r.lv]||'')===o);
       const t=o||'그 밖에';const lbl=one.length===1&&isLC(one[0])?'수당 (통장에 들어온 돈)':one.length===1&&isWeek(one[0])?'식비':t;
       return bigBtn(`data-v="${esc(o)}"`,lbl)}).join('')}</div>`}
+  const lp=['book','area','pick'].includes(step)?lastPick():null;
+  if(lp)h=`<h4>지난번 이 가게</h4><div class="bb"><button class="fav" data-last="1">${esc(lp.sc.name+' › '+itemName(lp.it))}<small style="display:block;font-size:13px;font-weight:500">눌러서 바로 저장</small></button></div><h5 class="sub">다른 항목이면 아래에서 골라요</h5>`+h;
   $('#flow').innerHTML=h;
   if(step==='amount')renderAmount();
   if(step==='memo'){
@@ -415,7 +441,20 @@ const AP=QUICK&&window.Android&&Android.pending?Android:null;
 const pendList=()=>{try{return AP?JSON.parse(AP.pending()||'[]'):[]}catch(e){return[]}};
 function pendApply(p){
   st.kind=p.kind==='수입'?'수입':'지출';$('#k-out').classList.toggle('on',st.kind==='지출');$('#k-in').classList.toggle('on',st.kind==='수입');
-  startFlow();st.amount=String(p.amount);$('#memo').value=p.name||'';F.pid=String(p.id);renderFlow();
+  startFlow();st.amount=String(p.amount);$('#memo').value=p.name||'';F.pid=String(p.id);
+  // 날짜 = 알림이 온 날(2026-11-17 룡: 여는 날이 아니라). 기록에는 날짜만 남는다
+  const t=new Date(Number(p.t));if(p.t&&!isNaN(t))st.date=ymd(t);renderDate();
+  renderFlow();
+  // 같은 가게로 전에 기록한 항목이 있으면 맨 위 큰 버튼 하나로(2026-11-17 룡). 서버 함수가 아직 없으면 지금처럼
+  const pid=F.pid;
+  if(p.name)rpc('fin_last_item',{p_name:p.name}).then(r=>{if(F.pid!==pid||!r||F.item)return;F.last=r;renderFlow()}).catch(e=>console.error(e));
+}
+function lastPick(){
+  const l=F.last;if(!l||!F.pid)return null;
+  const its=(F.qd[l.book]||{}).items||[];let it=its.find(i=>i.id===l.item);if(!it||it.kind!==st.kind)return null;
+  if(isWeek(it)){const w=Math.ceil(Number(st.date.slice(8))/7)+'주차';it=its.find(i=>isWeek(i)&&i.detail===w)||it}   // 식비 주차는 그날 주차로
+  const sc=scopes().find(s=>s.book===l.book&&s.area===(it.area||''));
+  return sc?{sc,it}:null;
 }
 function renderPend(){
   const el=$('#pend');if(!el)return;if(!AP){el.hidden=true;return}
@@ -428,14 +467,15 @@ function renderPend(){
 $('#pend').onclick=e=>{
   const b=e.target.closest('button');if(!b||!AP)return;const d=b.dataset;
   if(d.pd){const p=pendList().find(x=>String(x.id)===d.pd);if(p){pendApply(p);return}}
-  else if(d.px){AP.pendingDone(d.px);if(F.pid===d.px){startFlow();return}}
+  else if(d.px){AP.pendingDone(d.px);if(F.pid===d.px){st.date=today();renderDate();startFlow();return}}
   else if(d.pon)AP.noticeSetup();
   else if(d.phide){try{localStorage.setItem('fin_notice_hide','1')}catch(x){}}
   renderPend();
 };
 $('#flow').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
-  if(d.no){toast(d.no+' 장부는 결제권이 있는 사람만 기록해요',[],2500);return}
+  if(d.no){toast(d.no+' 장부는 결제권이 있는 사람만 기록해요. '+NO_SCOPE,[],4000);return}
+  if(d.last){const lp=lastPick();if(lp){F.bk=bookName(lp.sc.book);F.bkAuto=false;F.area=lp.sc.name;F.areaAuto=false;F.path=[];F.item=lp.it;if(fundsOf(lp.it).length)renderFlow();else save()}return}
   if(d.bk!==undefined){F.bk=d.bk;F.bkAuto=false;renderFlow();return}
   if(d.area!==undefined){F.area=d.area;F.areaAuto=false;renderFlow();return}
   if(d.v!==undefined){F.path.push({v:d.v,auto:false});renderFlow();return}
@@ -445,7 +485,7 @@ $('#back').onclick=()=>{
   F.item=null;F.fund=undefined;
   while(F.path.length&&F.path[F.path.length-1].auto)F.path.pop();
   if(F.path.length)F.path.pop();
-  else if(F.bk==='기업'&&F.area&&!F.areaAuto){F.area=null}
+  else if(F.bk!=='가정'&&F.area&&!F.areaAuto){F.area=null}
   else if(F.bk&&!F.bkAuto){F.bk=null;F.area=null}
   else{F.bk=null;F.area=null;st.amount=''}
   // 고른 칸이 하나도 안 남았는데 다시 저절로 같은 자리로 오면 한 칸 더 뒤로
@@ -472,6 +512,7 @@ async function save(){
   try{
     const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book,p_fund:fundsOf(i).some(f=>f.id===F.fund)?F.fund:null});
     if(pid&&AP)AP.pendingDone(pid);   // 은행 알림에서 온 건이면 「안 적은 것」에서 치운다
+    if(pid){st.date=today();renderDate()}   // 알림 날짜는 그 건에만
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]];
     if(i.kind==='수입'&&TITHE.includes(i.middle)){
       const t=Math.ceil(amount/10),ti=(F.qd[book].items||[]).find(x=>x.middle==='십일조(10%)');
@@ -485,7 +526,7 @@ async function save(){
     startFlow();
     await loadAll();render();
     if(QUICK){if(!pendList().length)setTimeout(closeQuick,acts.length>1||must?6000:1000)}else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
-  }catch(e){toast('저장 안 됨. ('+e.message+')',[],8000)}
+  }catch(e){fail(e)}
   st.busy=false;
 }
 
@@ -514,10 +555,10 @@ function editFund(id){
   $('#f-c').onclick=closeDlg;
   const n=sel=>{const v=$(sel).value.replace(/\D/g,'');return v===''?null:Number(v)};
   if($('#fd-x'))$('#fd-x').onclick=async e=>{const b=e.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent='한 번 더 누르면 지워요';return}
-    try{await rpc('fin_fund_delete',{p_book:st.book,p_id:f.id});closeDlg();await loadAll();render();toast(f.name+' 지웠어요 (지난 기록은 그대로)',[],2500)}catch(x){toast('안 됨. ('+x.message+')',[],5000)}};
+    try{await rpc('fin_fund_delete',{p_book:st.book,p_id:f.id});closeDlg();await loadAll();render();toast(f.name+' 지웠어요 (지난 기록은 그대로)',[],2500)}catch(x){fail(x,'지우지 못했어요.')}};
   $('#form').onsubmit=async e=>{e.preventDefault();
     try{await rpc('fin_fund_save',{p_book:st.book,p_id:f?f.id:null,p_item:$('#fd-i').value,p_name:$('#fd-n').value,p_due:$('#fd-d').value.trim(),p_start:n('#fd-s')||0,p_balance:n('#fd-b'),p_monthly:n('#fd-m')||0,p_plan:$('#fd-p').value.trim(),p_interest:$('#fd-r').value.trim()});
-      closeDlg();await loadAll();render();toast('저장했어요',[],1500)}catch(x){toast('저장 안 됨. ('+x.message+')',[],6000)}};
+      closeDlg();await loadAll();render();toast('저장했어요',[],1500)}catch(x){fail(x)}};
   $('#dlg').classList.add('on');
 }
 
@@ -567,7 +608,7 @@ function payGive(id){
     try{const cur=st.month.slice(0,7)===today().slice(0,7);const last=ymd(new Date(Number(st.month.slice(0,4)),Number(st.month.slice(5,7)),0));
       const eid=await rpc('fin_add',{p_date:cur?today():last,p_item:id,p_amount:v,p_memo:'',p_book:st.book});
       toast(`${x.i.middle} ${won(v)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]],4000);
-      await loadAll();render()}catch(x2){toast('저장 안 됨. ('+x2.message+')',[],8000)}
+      await loadAll();render()}catch(x2){fail(x2)}
     st.busy=false};
   $('#dlg').classList.add('on');setTimeout(()=>$('#f-p').select(),50);
 }
@@ -600,7 +641,7 @@ function putSet(k){
     try{const cur=st.month.slice(0,7)===today().slice(0,7);const last=ymd(new Date(Number(st.month.slice(0,4)),Number(st.month.slice(5,7)),0));
       const eid=await rpc('fin_add',{p_date:cur?today():last,p_item:x.i.id,p_amount:v,p_memo:x.memo,p_book:st.book});
       toast(`${x.memo} ${won(v)} 넣음`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]],4000);
-      await loadAll();render()}catch(x2){toast('저장 안 됨. ('+x2.message+')',[],8000)}
+      await loadAll();render()}catch(x2){fail(x2)}
     st.busy=false};
   $('#dlg').classList.add('on');setTimeout(()=>$('#f-p').select(),50);
 }
@@ -629,7 +670,7 @@ async function payFixed(bk,id,amount){
     const eid=await rpc('fin_add',{p_date:date,p_item:f.item_id,p_amount:amount,p_memo:f.name,p_book:bk,p_source:'fixed:'+f.id+':'+st.month.slice(0,7)});
     toast(`${f.name} ${won(amount)} 기록`,[['취소',async()=>{await rpc('fin_delete',{p_id:eid,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]],4000);
     await loadAll();render();
-  }catch(x){toast('저장 안 됨. ('+x.message+')',[],8000)}
+  }catch(x){fail(x)}
   st.busy=false;
 }
 // 고정비 보기·고치기·추가·지우기. 위에 「어디로 내나」를 크게, 복사 버튼
@@ -649,12 +690,12 @@ function editFixed(bk,id){
   $('#f-c').onclick=closeDlg;
   if($('#f-cp'))$('#f-cp').onclick=async()=>{try{await navigator.clipboard.writeText(f.account);toast('복사했어요',[],1500)}catch(x){const r=document.createRange();r.selectNodeContents($('#accTxt'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);toast('글자를 길게 눌러 복사해 주세요',[],2500)}};
   if($('#fx-x'))$('#fx-x').onclick=async e=>{const b=e.target;if(!b.dataset.sure){b.dataset.sure=1;b.textContent='한 번 더 누르면 지워요';return}
-    try{await rpc('fin_fixed_delete',{p_book:bk,p_id:f.id});closeDlg();await loadAll();render();toast(f.name+' 지웠어요 (지난 기록은 그대로)',[],2500)}catch(x){toast('안 됨. ('+x.message+')',[],5000)}};
+    try{await rpc('fin_fixed_delete',{p_book:bk,p_id:f.id});closeDlg();await loadAll();render();toast(f.name+' 지웠어요 (지난 기록은 그대로)',[],2500)}catch(x){fail(x,'지우지 못했어요.')}};
   $('#form').onsubmit=async e=>{e.preventDefault();if(!can)return;
     const day=Number($('#fx-d').value.replace(/\D/g,''))||null,amt=Number($('#fx-a').value.replace(/\D/g,''))||0;
     if(day&&(day<1||day>31)){toast('날짜는 1~31일',[],2000);return}
     try{await rpc('fin_fixed_save',{p_book:bk,p_id:f?f.id:null,p_name:$('#fx-n').value,p_item:$('#fx-i').value,p_day:day,p_amount:f&&f.loan?f.amount||0:amt,p_account:$('#fx-c').value.trim()});
-      closeDlg();await loadAll();render();toast('저장했어요',[],1500)}catch(x){toast('저장 안 됨. ('+x.message+')',[],6000)}};
+      closeDlg();await loadAll();render();toast('저장했어요',[],1500)}catch(x){fail(x)}};
   $('#dlg').classList.add('on');
 }
 function fxClick(e){
@@ -870,7 +911,7 @@ async function renderDash(){
   const book=st.book,month=st.month,tok=renderDash.t=(renderDash.t||0)+1;
   if(!el.innerHTML)el.innerHTML='<p style="color:var(--sub);text-align:center;padding:40px">불러오는 중…</p>';
   const ms=monthsBack(month,12);
-  let ds;try{ds=await Promise.all(ms.map(m=>histOf(book,m)))}catch(e){el.innerHTML=`<p style="padding:40px;text-align:center;color:var(--sub)">불러오지 못했습니다: ${esc(e.message)}</p>`;return}
+  let ds;try{ds=await Promise.all(ms.map(m=>histOf(book,m)))}catch(e){el.innerHTML=`<p style="padding:40px;text-align:center;color:var(--sub)">${esc(errText(e,'불러오지 못했어요.'))}</p>`;return}
   if(tok!==renderDash.t)return;
   const d=ds[ds.length-1],co=d.book==='기업',nums=ds.map(monthNums),n=nums[nums.length-1],p=nums[nums.length-2];
   const yr=month.slice(0,4),yIdx=ms.map((m,k)=>m.startsWith(yr)?k:-1).filter(k=>k>=0);
@@ -928,13 +969,13 @@ const openRec=k=>{setKind(k);show('rec')};
 const closeRec=()=>{startFlow();show(st.back||(PC?'dash':'list'))};
 $('#fabIn').onclick=()=>openRec('수입');$('#fabOut').onclick=()=>openRec('지출');$('#recClose').onclick=closeRec;
 $('#nav').onclick=e=>{if(e.target.dataset.v)show(e.target.dataset.v)};
-window.addEventListener('unhandledrejection',e=>toast('문제가 생겼습니다: '+(e.reason&&e.reason.message||e.reason),[],6000));
+window.addEventListener('unhandledrejection',e=>toast(errText(e.reason,'문제가 생겼어요.'),[],6000));
 
 (async()=>{
   $('#msg').hidden=true;
   if(!token){renderAuth();return}
   try{await enter()}
-  catch(e){if(token){$('#msg').hidden=false;$('#msg').textContent='열지 못했습니다: '+e.message}}
+  catch(e){if(token){$('#msg').hidden=false;$('#msg').textContent=errText(e,'열지 못했어요.')}}
 })();
 /* 빠르게 열기(2026-11-06 룡: 위젯이 뻑뻑함): 지난번 받은 계정·이번 달 장부를 폰에 두었다가 바로 그리고,
    새 것은 뒤에서 받아 바꾼다. 같은 로그인·같은 달일 때만 쓴다 */
@@ -945,7 +986,7 @@ function setup(){
   st.book=(bs.find(b=>b.id===saved)||bs[0]||{}).id||null;
   st.data=F.qd[st.book]||Object.values(F.qd)[0];
   renderBooks();
-  $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(QUICK?'rec':PC?'dash':'list');if(QUICK)$('#kindSeg').hidden=$('#recClose').hidden=true;setKind(st.kind);
+  $('#msg').hidden=true;$('#auth').hidden=true;$('#barTop').hidden=false;$('#nav').hidden=false;$('#myName').textContent=me.name;render();show(QUICK?'rec':PC?'dash':'list');if(QUICK)$('#recClose').hidden=true;setKind(st.kind);   // 빠른 창도 수입|지출 두 버튼을 보인다(2026-11-17 룡)
   // 「기록할까요?」 알림을 눌러 열렸으면 그 건의 금액·메모를 채운다
   if(AP){let id='';try{id=AP.picked()}catch(x){}const p=id&&pendList().find(x=>String(x.id)===id);if(p)pendApply(p)}
 }
@@ -967,7 +1008,8 @@ function renderAuth(){
   a.innerHTML=`<h1>재정 기록</h1><p>돈 쓰고 들어온 것을 바로</p>
    <form id="lf"><label class="f">아이디<input id="nick" autocomplete="username" required></label>
    <label class="f">비밀번호<input id="pw" type="password" autocomplete="current-password" required></label>
-   <div class="err" id="err"></div><button class="main-btn" id="go">들어가기</button></form>`;
+   <div class="err" id="err"></div><button class="main-btn" id="go">들어가기</button></form>
+   <p class="help">비밀번호를 잊었으면 초대한 사람(관리자)에게 말해 주세요. 새 비밀번호를 정해 줍니다.</p>`+(IN_APP?'':appHelp());
   $('#lf').onsubmit=async e=>{e.preventDefault();const go=$('#go'),err=$('#err');go.disabled=true;err.textContent='';
     try{
       const r=await fetch(API+'fin_login',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_id:$('#nick').value,p_pw:$('#pw').value})});
@@ -979,7 +1021,86 @@ function renderAuth(){
 /* ☰ 계정 창. 로그아웃은 이 앱의 모든 기기에서 나간다. 비밀번호를 바꾸면 계정이 같아 모든 기록에서 나간다 */
 /* 처음 비밀번호면 바꾸기 전에는 닫히지 않는다(업무·영성·건강 기록과 같음) */
 let pwForced=false;
-function amView(v){$('#amMain').hidden=v!=='main';$('#amSetView').hidden=v!=='set';$('#pwForm').hidden=v!=='pw'}
+function amView(v){$('#amMain').hidden=v!=='main';$('#amSetView').hidden=v!=='set';$('#pwForm').hidden=v!=='pw';$('#imView').hidden=v!=='item'}
+// 앱으로 받기(폰 브라우저·PC에서만 보인다). 파일은 이 사이트의 app/faith-budget.apk(앱이 스스로 업데이트하는 그 파일)
+function appHelp(){return `<details><summary>📱 앱으로 받기 (안드로이드)</summary>
+  <ol><li>아래 「앱 받기」를 눌러 파일을 받아요.</li><li>받은 파일을 열고 「설치」를 눌러요. 「이 출처 허용」이 나오면 켜요.</li><li>앱을 열고 같은 아이디로 들어와요.</li></ol>
+  <a class="main-btn" href="app/faith-budget.apk">앱 받기</a>
+  <small>은행·카드 알림이 오면 「기록할까요?」를 묻게 하려면: 앱 ☰ → 🔔 은행·카드 알림 켜기 → ① 「켜러 가기」 → 목록에서 「재정 기록」 켜기. 회색이라 안 눌리면 「앱 정보」 → 오른쪽 위 ⋮ → 「제한된 설정 허용」 뒤 다시.</small></details>`}
+if(!IN_APP)$('#amApp').hidden=false;
+/* 항목 관리(2026-11-17 룡: 앱만 쓰는 사람이 혼자 항목을 더하고 고친다). 지금 고른 장부에서 내 기록 권한이 있는 영역 것만.
+   지우지 않고 숨긴다(지난 기록은 그대로). 계산에 쓰는 항목(십일조·이월·매출 등)은 서버가 막는다 */
+const IM={kind:'지출',list:null,edit:null,err:'',book:null,area:undefined};
+const imAreas=()=>scopes().filter(s=>s.book===IM.book);
+const imAreaName=a=>(imAreas().find(s=>s.area===(a||''))||{}).name||a||'';
+async function imLoad(){
+  IM.book=st.book;IM.list=null;IM.err='';imRender();
+  try{IM.list=await rpc('fin_item_list',{p_book:IM.book})||[]}
+  catch(e){console.error(e);const m=String(e.message||'');IM.err=/로그인/.test(m)?m:/fin_item_list|schema cache/.test(m)?'항목 관리는 아직 준비 중이에요. 관리자에게 말해 주세요.':'불러오지 못했어요. 다시 열어 주세요. 계속 안 되면 관리자에게 말해 주세요.'}
+  imRender();
+}
+function imRender(){
+  const el=$('#imView');
+  let h=`<button type="button" class="am-back" data-im="back">‹ 설정으로</button><p style="margin:4px 2px 8px;font-weight:700">${esc(bookName(IM.book))} 장부 항목</p>`;
+  if(IM.err){el.innerHTML=h+`<p class="err">${esc(IM.err)}</p>`;return}
+  if(!IM.list){el.innerHTML=h+'<p style="color:var(--sub)">불러오는 중…</p>';return}
+  const areas=imAreas();
+  if(!areas.length){el.innerHTML=h+`<p style="color:var(--sub);font-size:14px">이 장부는 기록 권한이 없어 항목을 고칠 수 없어요. ${NO_SCOPE}</p>`;return}
+  if(IM.edit){el.innerHTML=h+imForm();return}
+  h+=`<div class="seg" style="margin-bottom:8px">${['지출','수입'].map(k=>`<button type="button" data-imk="${k}" class="${IM.kind===k?'on':''}${k==='수입'?' in':''}" style="flex:1">${k}</button>`).join('')}</div>`;
+  h+=`<button type="button" class="main-btn" data-im="new">＋ ${IM.kind} 항목 더하기</button>`;
+  let last=null;
+  IM.list.filter(i=>i.kind===IM.kind).forEach(i=>{const g=(areas.length>1?imAreaName(i.area)+' · ':'')+i.bucket;
+    if(g!==last){h+=`<h5 style="margin:14px 2px 0;font-size:13px;color:var(--sub)">${esc(g)}</h5>`;last=g}
+    h+=`<button type="button" class="am-item" data-ime="${i.id}"${i.active?'':' style="opacity:.55"'}><span>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}</span><small>${i.active?(i.locked?'계산에 쓰임':'›'):'숨김'}</small></button>`});
+  el.innerHTML=h;
+}
+function imForm(){
+  const areas=imAreas();
+  if(IM.edit==='new'){
+    const area=areas.some(s=>s.area===IM.area)?IM.area:areas[0].area;
+    const bks=[...new Set(IM.list.filter(i=>i.kind===IM.kind&&(i.area||'')===area).map(i=>i.bucket))];
+    return `<form id="imForm"><p style="margin:0 2px 8px;color:var(--sub);font-size:14px">${IM.kind} 항목 더하기</p>
+      ${areas.length>1?`<label class="f">영역<select id="im-a">${areas.map(s=>`<option value="${esc(s.area)}"${s.area===area?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`:''}
+      <label class="f">대분류<select id="im-b">${bks.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('')}<option value="">＋ 새 대분류</option></select></label>
+      <label class="f" id="im-bnw"${bks.length?' hidden':''}>새 대분류 이름<input id="im-bn" maxlength="20"></label>
+      <label class="f">이름<input id="im-m" maxlength="20" required placeholder="예: 외식비"></label>
+      <label class="f">더 작은 분류 (안 써도 됩니다)<input id="im-d" maxlength="20"></label>
+      <div class="err" id="imErr"></div>
+      <div class="btns"><button type="button" data-im="list">닫기</button><button class="ok">더하기</button></div></form>`;
+  }
+  const i=IM.list.find(x=>x.id===IM.edit);if(!i){IM.edit=null;return ''}
+  const off=i.locked?' disabled':'';
+  return `<form id="imForm"><p style="margin:0 2px 8px;color:var(--sub);font-size:14px">${esc((areas.length>1?imAreaName(i.area)+' · ':'')+i.kind+' · '+i.bucket)}</p>
+    ${i.locked?'<p style="font-size:14px;color:var(--sub);margin:0 2px 10px">십일조·이월·매출처럼 계산에 쓰는 항목이라 이름을 바꾸거나 숨길 수 없어요.</p>':''}
+    <label class="f">이름<input id="im-m" maxlength="20" required value="${esc(i.middle)}"${off}></label>
+    <label class="f">더 작은 분류 (안 써도 됩니다)<input id="im-d" maxlength="20" value="${esc(i.detail)}"${off}></label>
+    <div class="err" id="imErr"></div>
+    ${i.locked?'':`<button type="button" class="am-item${i.active?' danger':''}" data-imh="${i.active?1:0}"><span>${i.active?'숨기기':'다시 보이기'}</span><small>${i.active?'기록 화면에서 빠져요. 지난 기록은 그대로':'기록 화면에 다시 나와요'}</small></button>`}
+    <div class="btns" style="margin-top:10px"><button type="button" data-im="list">닫기</button>${i.locked?'':'<button class="ok">저장</button>'}</div></form>`;
+}
+async function imDo(fn,args,done){
+  try{await rpc(fn,args)}catch(x){const e=$('#imErr');if(e)e.textContent=errText(x);return}
+  IM.edit=null;toast(done,[],1500);
+  try{await loadAll();render()}catch(x){console.error(x)}
+  await imLoad();
+}
+$('#imView').onclick=e=>{const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.im==='back'){amView('set');return}
+  if(d.im==='list'){IM.edit=null;imRender();return}
+  if(d.im==='new'){IM.edit='new';imRender();return}
+  if(d.imk){IM.kind=d.imk;imRender();return}
+  if(d.ime){IM.edit=d.ime;imRender();return}
+  if(d.imh!==undefined){const hide=d.imh==='1';imDo('fin_item_hide',{p_book:IM.book,p_id:IM.edit,p_hide:hide},hide?'숨겼어요':'다시 보여요')}
+};
+$('#imView').onchange=e=>{if(e.target.id==='im-a'){IM.area=e.target.value;imRender()}else if(e.target.id==='im-b')$('#im-bnw').hidden=!!e.target.value};
+$('#imView').onsubmit=e=>{e.preventDefault();const err=$('#imErr');err.textContent='';
+  const m=$('#im-m').value.trim(),dt=$('#im-d').value.trim();if(!m){err.textContent='이름을 적어 주세요.';return}
+  if(IM.edit==='new'){const area=$('#im-a')?$('#im-a').value:imAreas()[0].area,b=$('#im-b').value||$('#im-bn').value.trim();
+    if(!b){err.textContent='대분류를 골라 주세요.';return}
+    imDo('fin_item_save',{p_book:IM.book,p_id:null,p_kind:IM.kind,p_area:area,p_bucket:b,p_middle:m,p_detail:dt},'더했어요')}
+  else imDo('fin_item_save',{p_book:IM.book,p_id:IM.edit,p_kind:null,p_area:null,p_bucket:null,p_middle:m,p_detail:dt},'바꿨어요');
+};
 function forcePw(){
   if(pwForced)return;pwForced=true;amView('pw');$('#pwForm').reset();$('#pwErr').textContent='';
   $('#amName').textContent=me.name+'님';$('#amClose').hidden=$('#pwBack').hidden=true;$('#pwMust').hidden=false;$('#amBg').hidden=false;
@@ -992,7 +1113,8 @@ $('#amBg').onclick=e=>{if(e.target.id==='amBg'&&!pwForced)$('#amBg').hidden=true
 window.appBack=()=>{
   if(!$('#amBg').hidden){
     if(pwForced)return true;
-    if(!$('#pwForm').hidden)amView('set');else if(!$('#amSetView').hidden)amView('main');else $('#amBg').hidden=true;
+    if(!$('#imView').hidden){if(IM.edit){IM.edit=null;imRender()}else amView('set')}
+    else if(!$('#pwForm').hidden)amView('set');else if(!$('#amSetView').hidden)amView('main');else $('#amBg').hidden=true;
     return true;
   }
   if($('#dlg').classList.contains('on')){closeDlg();return true}
@@ -1009,6 +1131,7 @@ window.appBack=()=>{
   return false;
 };
 $('#amSet').onclick=()=>amView('set');
+$('#amItems').onclick=()=>{IM.edit=null;amView('item');imLoad()};
 $('#amBack').onclick=()=>amView('main');
 $('#pwBack').onclick=()=>amView('set');
 // 앱에서만: 내 은행·카드 앱 알림 켜기 창(폰 기능). 빠른 기록 창은 위 「🔔 켜기」 줄이 같은 창을 연다
@@ -1023,7 +1146,7 @@ $('#pwForm').onsubmit=async e=>{
     const d=await rpc('fin_change_password',{p_current:$('#pwNow').value,p_next:$('#pwNew').value});
     if(d.error){$('#pwErr').textContent=d.error;return}
     logout();$('#err').textContent='비밀번호를 바꿨어요. 모든 기기에서 나갔어요. 새 비밀번호로 들어와 주세요.';
-  }catch(x){$('#pwErr').textContent=x.message}finally{btn.disabled=false}
+  }catch(x){$('#pwErr').textContent=errText(x,'바꾸지 못했어요.')}finally{btn.disabled=false}
 };
 // 앱을 다시 열 때 최신으로
 window.refresh=()=>{if(st.data&&!st.busy)loadAll().then(render).catch(()=>{})};
