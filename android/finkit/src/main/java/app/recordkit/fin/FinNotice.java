@@ -31,7 +31,9 @@ public class FinNotice extends NotificationListenerService {
             if (!FinParse.fromMoneyApp(pkg, title)) return;
             FinParse.Hit h = FinParse.parse(title, text);
             if (h == null) return;
-            JSONObject it = FinPending.add(this, h, sbn.getPostTime());
+            // 카드 앱에서 온 알림이면 빠른 기록 창이 「💳 카드로 냄」을 미리 켠다(체크카드는 계좌에서 바로 나가므로 뺀다)
+            boolean card = "지출".equals(h.kind) && pkg.toLowerCase(java.util.Locale.ROOT).contains("card") && !(title + text).contains("체크");
+            JSONObject it = FinPending.add(this, h, sbn.getPostTime(), card);
             if (it == null) return;
             FinAsk.show(this, it);
             FinWidget.refresh(this);

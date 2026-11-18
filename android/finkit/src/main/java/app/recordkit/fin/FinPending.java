@@ -21,7 +21,7 @@ public final class FinPending {
     }
 
     /** 새 건을 넣는다. 2분 안에 같은 금액이 이미 왔으면(기록했든 안 했든) 넣지 않고 null */
-    public static synchronized JSONObject add(Context c, FinParse.Hit h, long when) {
+    public static synchronized JSONObject add(Context c, FinParse.Hit h, long when, boolean card) {
         try {
             JSONArray recent = read(c, "recent"), keepRecent = new JSONArray();
             boolean dup = false;
@@ -40,7 +40,7 @@ public final class FinPending {
                 long other = list.getJSONObject(i).getLong("id");
                 if (other >= id) id = other + 1;
             }
-            JSONObject it = new JSONObject().put("id", id).put("kind", h.kind).put("amount", h.amount).put("name", h.name).put("t", when);
+            JSONObject it = new JSONObject().put("id", id).put("kind", h.kind).put("amount", h.amount).put("name", h.name).put("t", when).put("card", card);
             list.put(it);
             while (list.length() > MAX) list.remove(0);
             sp(c).edit().putString("list", list.toString()).putString("recent", keepRecent.toString()).apply();
