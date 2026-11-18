@@ -152,6 +152,7 @@ a.main-btn{display:block;text-align:center;text-decoration:none}
 .fx.give>h4{color:var(--main)}
 .fx.fd .fr b{font-size:14px}
 #fundPick .chip{margin:0}
+#cardPick .chip{margin:0;padding:8px 11px;font-size:14px}
 .fx .fr em{font-style:normal;color:var(--sub);font-size:12px}
 .acc{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:15px;font-weight:600;color:var(--ink);display:flex;flex-wrap:wrap;gap:6px;align-items:center;white-space:pre-wrap}
 .acc small{width:100%;font-size:12px;color:var(--sub);font-weight:500}
@@ -272,6 +273,7 @@ table.pv{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric
   </div>
   <div id="memoBox" hidden>
     <div id="fundPick"></div>
+    <div id="cardPick"></div>
     <input id="memo" class="memo" placeholder="메모 (안 써도 됩니다)" autocomplete="off">
     <button id="saveBtn" class="main-btn save">저장</button>
   </div>
@@ -367,7 +369,7 @@ const bigBtn=(attr,text,cls='')=>`<button class="${cls}" ${attr}>${esc(text)}</b
 const LV=['bucket','middle','detail'];
 const myBooks=()=>[...new Set(scopes().map(s=>bookName(s.book)))].filter(b=>scopes().some(s=>bookName(s.book)===b&&itemsOf(s).length));
 const coScopes=(bk=F.bk||'기업')=>scopes().filter(s=>bookName(s.book)===bk&&itemsOf(s).length);
-function startFlow(){if(F.pid){st.date=today();renderDate()}F.pid=null;F.last=null;F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
+function startFlow(){if(F.pid){st.date=today();renderDate()}F.pid=null;F.last=null;F.card=null;F.cardHint=0;F.fund=undefined;F.bk=null;F.bkAuto=false;F.area=null;F.areaAuto=false;F.path=[];F.item=null;st.amount='';$('#memo').value='';renderFlow()}
 // 지금 자리에서 고를 것: {lv, opts} 또는 항목이 정해지면 F.item을 채운다
 function resolve(){
   // 위젯은 가정|기업을 늘 묻고, 앱은 위쪽 가정|기업 버튼에서 고른 장부를 그대로 쓴다(2026-11-06 룡)
@@ -432,6 +434,7 @@ function renderFlow(){
     $('#fundPick').innerHTML=fs.length?`<h5 style="margin:6px 12px 4px">어디에 낸 돈?</h5><div class="row" style="padding:0 12px 8px">${fs.map(f=>`<button class="chip${F.fund===f.id?' fav':''}" data-fund="${f.id}">${esc(f.name)}</button>`).join('')}<button class="chip${!F.fund?' fav':''}" data-fund="">해당 없음</button></div>`:'';
     if(!fs.length)setTimeout(()=>$('#memo').focus(),50);
   }
+  renderCardPick(step==='memo');
   renderAlert();renderPend();
 }
 /* 은행·카드 알림에서 온 「안 적은 것」(2026-11-16 룡: 알림이 뜨면 「기록할까요?」, 안 적은 것은 치울 때까지 보이게).
@@ -441,7 +444,7 @@ const AP=QUICK&&window.Android&&Android.pending?Android:null;
 const pendList=()=>{try{return AP?JSON.parse(AP.pending()||'[]'):[]}catch(e){return[]}};
 function pendApply(p){
   st.kind=p.kind==='수입'?'수입':'지출';$('#k-out').classList.toggle('on',st.kind==='지출');$('#k-in').classList.toggle('on',st.kind==='수입');
-  startFlow();st.amount=String(p.amount);$('#memo').value=p.name||'';F.pid=String(p.id);
+  startFlow();st.amount=String(p.amount);$('#memo').value=p.name||'';F.pid=String(p.id);if(p.card)F.cardHint=1;
   // 날짜 = 알림이 온 날(2026-11-17 룡: 여는 날이 아니라). 기록에는 날짜만 남는다
   const t=new Date(Number(p.t));if(p.t&&!isNaN(t))st.date=ymd(t);renderDate();
   renderFlow();
@@ -472,10 +475,68 @@ $('#pend').onclick=e=>{
   else if(d.phide){try{localStorage.setItem('fin_notice_hide','1')}catch(x){}}
   renderPend();
 };
+/* 신용카드 대금(2026-11-16 룡: 「다음 달 카드대금을 알아야 해」). 가정 장부의 지출에만 쓴다.
+   가정 지출을 적을 때 「💳 카드로 냄」(일시불·할부 개월 수)을 누르면 결제일별 이용 기간으로 언제 얼마가 나가는지 센다.
+   기록 금액은 총금액 그대로(지출은 쓴 날 한 번), 카드값만 달마다 나눠 보인다. 할부 이자는 모른다.
+   시작 금액 = 카드사 앱의 「결제예정금액」. 그 금액을 넣기 전에 적은 💳 기록은 그 결제 달(과 그 앞)의 몫이 이미 들어 있다고 보고 빼고,
+   그 뒤 달의 할부 회차는 센다(넣기 전·후는 기록한 시각으로 가른다).
+   이용 기간 출처: 현대카드 「카드 종합 이용 안내 > 결제방법」(2026-11-16 확인). [시작 달, 시작일, 끝 달, 끝일(0 = 말일)], 달은 결제 달 기준 */
+const CARD_P={1:[-2,20,-1,19],5:[-2,24,-1,23],10:[-2,29,-1,28],12:[-1,1,-1,0],15:[-1,4,0,3],20:[-1,9,0,8],23:[-1,12,0,11],24:[-1,13,0,12],25:[-1,14,0,13],26:[-1,15,0,14]};
+const CARD_M=[1,2,3,4,5,6,10,12];
+const cardPeriod=(y,m,D)=>{const p=CARD_P[D];return[ymd(new Date(y,m+p[0],p[1])),ymd(p[3]?new Date(y,m+p[2],p[3]):new Date(y,m+p[2]+1,0))]};
+const ymKey=(y,m)=>{const d=new Date(y,m,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)};
+// 그 날 쓴 것이 처음 나가는 결제 달 [y,m]
+function cardFirstPay(date,D){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7))-1;
+  for(let k=0;k<4;k++){const[s,e]=cardPeriod(y,m+k,D);if(date>=s&&date<=e)return[y,m+k]}
+  return[y,m+1]}
+// 결제 달('YYYY-MM')마다 나갈 금액
+function cardDue(c){const due={},D=c.day,sp=c.start&&c.start_pay?c.start_pay.slice(0,7):'',sa=c.start_at?Date.parse(c.start_at):0;
+  (c.list||[]).forEach(e=>{const n=Number(e.months)||1,a=Number(e.amount),base=Math.floor(a/n),[y,m]=cardFirstPay(e.date,D);
+    const old=sp&&sa&&e.at&&Date.parse(e.at)<sa;   // 시작 금액을 넣기 전에 적은 기록
+    for(let k=0;k<n;k++){const key=ymKey(y,m+k);if(old&&key<=sp)continue;due[key]=(due[key]||0)+(k?base:a-base*(n-1))}});
+  if(sp)due[sp]=(due[sp]||0)+Number(c.start);
+  return due}
+// 다음 결제일 [y,m]: 오늘이 결제일이거나 지났으면 다음 달(결제일 당일은 이미 나간 것으로 본다)
+const cardNext=D=>{const t=new Date();return[t.getFullYear(),t.getMonth()+(t.getDate()>=D?1:0)]};
+// 카드 표시는 가정 장부의 지출에만
+const cardBook=()=>!!st.data&&st.data.book==='가정';
+function cardHtml(){
+  if(!cardBook())return'';const c=st.data.card;if(!c)return'';
+  if(!c.day||!CARD_P[c.day])return `<div class="fx"><h4 data-card="1"><span>💳 카드값</span><small>결제일 넣기 ›</small></h4></div>`;
+  const due=cardDue(c),[y,m]=cardNext(c.day);
+  const lbl=i=>{const d=new Date(y,m+i,1);return `${d.getMonth()+1}/${c.day}`};
+  return `<div class="fx"><h4 data-card="1"><span>💳 ${lbl(0)}에 나갈 카드값</span><small><b style="color:var(--text,#1c2420);font-size:15px">${won(due[ymKey(y,m)]||0)}</b> ›</small></h4>
+   <div data-card="1" style="padding:0 12px 10px;font-size:13px;color:var(--sub)">그다음 ${lbl(1)} · ${won(due[ymKey(y,m+1)]||0)}</div></div>`;
+}
+function cardDlg(){
+  const c=st.data.card||{},num=v=>v?Number(v).toLocaleString('ko-KR'):'';
+  const per=D=>{if(!CARD_P[D])return'';const[y,m]=cardNext(D),[a,b]=cardPeriod(y,m,D);const f=x=>Number(x.slice(5,7))+'/'+Number(x.slice(8));return `다음 결제 ${m%12+1}/${D} = ${f(a)} ~ ${f(b)}에 쓴 것`};
+  $('#form').innerHTML=`<h3 style="margin:0 0 4px">💳 카드값</h3>
+   <label>결제일<select id="c-d"><option value="">모름</option>${Object.keys(CARD_P).map(d=>`<option value="${d}"${Number(d)===c.day?' selected':''}>${d}일</option>`).join('')}</select></label>
+   <p id="c-p" style="margin:2px 0 8px;font-size:13px;color:var(--sub)">${per(c.day)}</p>
+   <label>지금 결제예정금액 (카드 앱에 나오는 금액)<input id="c-s" inputmode="numeric" value="${num(c.start)}" placeholder="안 넣어도 됩니다"></label>
+   <p style="margin:2px 0 8px;font-size:13px;color:var(--sub)">넣으면 다음 결제일 카드값에 더합니다. 넣은 날부터 적는 「💳 카드로 냄」 기록을 그 위에 셉니다. 할부 이자는 세지 못합니다.</p>
+   <div class="btns"><button type="button" id="f-c">닫기</button><button class="ok">저장</button></div>`;
+  $('#c-d').onchange=e=>$('#c-p').textContent=per(Number(e.target.value));
+  $('#f-c').onclick=closeDlg;
+  $('#form').onsubmit=async e=>{e.preventDefault();
+    const D=Number($('#c-d').value)||null,a=Number($('#c-s').value.replace(/\D/g,''))||0;
+    let pay=null;if(a&&D){if(a===Number(c.start)&&c.start_pay)pay=c.start_pay;else{const[y,m]=cardNext(D);pay=ymKey(y,m)+'-'+pad(D)}}
+    if(a&&!D){toast('결제일을 골라 주세요',[],2000);return}
+    try{await rpc('fin_card_set',{p_book:st.book,p_day:D,p_start:a,p_start_pay:pay});closeDlg();await load();toast('저장했습니다',[],1500)}catch(x){fail(x)}};
+  $('#dlg').classList.add('on');
+}
+function renderCardPick(show){
+  const el=$('#cardPick');const on=show&&F.item&&F.bk==='가정'&&st.kind==='지출';
+  if(!on){el.innerHTML='';return}
+  if(F.cardHint){F.card=F.card||1;F.cardHint=0}
+  el.innerHTML=`<div class="row" style="padding:0 12px 8px"><button class="chip${F.card?' fav':''}" data-cd="${F.card?'':'1'}">💳 카드로 냄</button>${F.card?CARD_M.map(n=>`<button class="chip${F.card===n?' fav':''}" data-cd="${n}">${n===1?'일시불':n+'개월'}</button>`).join(''):''}</div>`;
+}
+$('#cardPick').onclick=e=>{const b=e.target.closest('[data-cd]');if(!b)return;F.card=Number(b.dataset.cd)||null;renderCardPick(true)};
 $('#flow').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(d.no){toast(d.no+' 장부는 결제권이 있는 사람만 기록해요. '+NO_SCOPE,[],4000);return}
-  if(d.last){const lp=lastPick();if(lp){F.bk=bookName(lp.sc.book);F.bkAuto=false;F.area=lp.sc.name;F.areaAuto=false;F.path=[];F.item=lp.it;if(fundsOf(lp.it).length)renderFlow();else save()}return}
+  if(d.last){const lp=lastPick();if(lp){F.bk=bookName(lp.sc.book);F.bkAuto=false;F.area=lp.sc.name;F.areaAuto=false;F.path=[];F.item=lp.it;if(fundsOf(lp.it).length)renderFlow();else{if(F.cardHint&&F.bk==='가정'&&st.kind==='지출')F.card=1;save()}}return}
   if(d.bk!==undefined){F.bk=d.bk;F.bkAuto=false;renderFlow();return}
   if(d.area!==undefined){F.area=d.area;F.areaAuto=false;renderFlow();return}
   if(d.v!==undefined){F.path.push({v:d.v,auto:false});renderFlow();return}
@@ -508,9 +569,9 @@ $('#memo').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save()}};
 async function save(){
   const i=F.item,sc=scopeOf(F.area);if(!i||!sc||st.busy)return;
   st.busy=true;
-  const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date,book=sc.book,pid=F.pid;
+  const amount=Number(st.amount),memo=$('#memo').value.trim(),date=st.date,book=sc.book,pid=F.pid,card=F.bk==='가정'&&i.kind==='지출'&&F.card||null;
   try{
-    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book,p_fund:fundsOf(i).some(f=>f.id===F.fund)?F.fund:null});
+    const id=await rpc('fin_add',{p_date:date,p_item:i.id,p_amount:amount,p_memo:memo,p_book:book,p_fund:fundsOf(i).some(f=>f.id===F.fund)?F.fund:null,p_card:card});
     if(pid&&AP)AP.pendingDone(pid);   // 은행 알림에서 온 건이면 「안 적은 것」에서 치운다
     if(pid){st.date=today();renderDate()}   // 알림 날짜는 그 건에만
     const acts=[['취소',async()=>{await rpc('fin_delete',{p_id:id,p_restore:false});await loadAll();render();toast('취소했습니다',[],1500)}]];
@@ -522,7 +583,7 @@ async function save(){
     /* 기업 매출·수당이 들어오면 꼭 넣을 것을 바로 보여 준다(2026-11-10 룡). 막지 않는다: 창은 그대로 닫히고, 다 넣을 때까지 첫 화면 「넣을 것」에 남는다 */
     const co=(F.qd[book]||{}).book==='기업'&&i.kind==='수입'&&i.bucket==='사업소득';
     const must=co&&i.middle==='매출'?`꼭 넣기 → 부가세 칸 ${won(Math.floor(amount/11))} · 십일조 예비비 ${won(Math.floor(amount/11))}`:co&&i.middle==='수당'?`꼭 넣기 → 십일조 예비비 ${won(Math.floor(amount/10))}`:'';
-    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:'')+(must?' · '+must:''),acts,acts.length>1||lc||must?9000:4000);
+    toast(`${F.area} ${itemName(i)} ${won(amount)} 기록`+(card?(card>1?` · 💳 ${card}개월`:' · 💳 카드'):'')+(lc?` · 세전 ${won(lc.gross)}, 뗀 세금 3.3% ${won(lc.tax)}`:'')+(must?' · '+must:''),acts,acts.length>1||lc||must?9000:4000);
     startFlow();
     await loadAll();render();
     if(QUICK){if(!pendList().length)setTimeout(closeQuick,acts.length>1||must?6000:1000)}else show(st.back||(PC?'dash':'list'));   // 빠른 창은 저장하면 닫힌다
@@ -721,17 +782,17 @@ function renderMonth(){
 function renderList(){
   const by={};st.data.entries.forEach(e=>(by[e.date]=by[e.date]||[]).push(e));
   const days=Object.keys(by);
-  $('#list').innerHTML=giveHtml()+setHtml()+dueHtml()+(days.length?days.map(d=>{
+  $('#list').innerHTML=giveHtml()+setHtml()+dueHtml()+cardHtml()+(days.length?days.map(d=>{
     const dt=new Date(d+'T00:00');
     return `<div class="day">${dt.getMonth()+1}/${dt.getDate()} (${'일월화수목금토'[dt.getDay()]})</div>`+by[d].map(e=>{
       const i=item(e.item_id)||{};const inc=i.kind==='수입';
       const nm=i.area?i.area+' '+i.middle:(i.detail?i.middle+' · '+i.detail:i.middle);
       const fn=e.fund?((st.data.funds||[]).find(f=>f.id===e.fund)||{}).name:'';
-      const sub=isCo()?[i.kind==='지출'&&i.expense===false?'경비 아님':'',fn,e.memo,e.by].filter(Boolean).join(' · '):[fn,e.memo].filter(Boolean).join(' · ');   // 기업은 누가 적었는지도
+      const sub=isCo()?[i.kind==='지출'&&i.expense===false?'경비 아님':'',fn,e.memo,e.by].filter(Boolean).join(' · '):[e.card?'💳'+(e.card>1?' '+e.card+'개월':''):'',fn,e.memo].filter(Boolean).join(' · ');   // 기업은 누가 적었는지도
       return `<button class="ent" data-e="${e.id}"><span>${esc(nm)}<small>${esc(sub)}</small></span><b class="${inc?'inc':''}">${inc?'+':''}${won(e.amount)}</b></button>`}).join('');
   }).join(''):'<p style="text-align:center;color:var(--sub);padding:32px">이 달 기록이 없습니다</p>');
 }
-$('#list').onclick=e=>{if(fxClick(e))return;const b=e.target.closest('[data-e]');if(b)editEntry(st.data.entries.find(x=>x.id===b.dataset.e))};
+$('#list').onclick=e=>{if(e.target.closest('[data-card]')){cardDlg();return}if(fxClick(e))return;const b=e.target.closest('[data-e]');if(b)editEntry(st.data.entries.find(x=>x.id===b.dataset.e))};
 function closeDlg(){$('#dlg').classList.remove('on')}
 $('#dlg').onclick=e=>{if(e.target.id==='dlg')closeDlg()};
 function editEntry(en){
@@ -740,12 +801,17 @@ function editEntry(en){
    <label>날짜<input id="f-d" type="date" value="${en.date}"></label>
    <label>항목<select id="f-i">${Object.entries(groups).map(([k,a])=>`<optgroup label="${esc(k)}">${a.map(i=>`<option value="${i.id}"${i.id===en.item_id?' selected':''}>${esc(i.detail?i.middle+' · '+i.detail:i.middle)}</option>`).join('')}</optgroup>`).join('')}</select></label>
    <label>메모<input id="f-m" value="${esc(en.memo)}"></label>
+   ${!cardBook()||(item(en.item_id)||{}).kind!=='지출'?'':`<label>결제<select id="f-k"><option value="">계좌·체크</option>${CARD_M.concat(CARD_M.includes(en.card)||!en.card?[]:[en.card]).map(n=>`<option value="${n}"${en.card===n?' selected':''}>💳 카드 ${n===1?'일시불':n+'개월'}</option>`).join('')}</select></label>`}
    <div class="btns"><button type="button" class="del" id="f-x">지우기</button><button type="button" id="f-c">닫기</button><button class="ok">저장</button></div>`;
   $('#f-c').onclick=closeDlg;
   $('#f-x').onclick=async()=>{closeDlg();await rpc('fin_delete',{p_id:en.id,p_restore:false});await load();
     toast('지웠습니다',[['되돌리기',async()=>{await rpc('fin_delete',{p_id:en.id,p_restore:true});await load()}]])};
   $('#form').onsubmit=async e=>{e.preventDefault();const a=Number($('#f-a').value.replace(/\D/g,''));if(!a){toast('금액을 확인해 주세요',[],1500);return}
-    await rpc('fin_update',{p_id:en.id,p_date:$('#f-d').value,p_item:$('#f-i').value,p_amount:a,p_memo:$('#f-m').value});closeDlg();await load();toast('고쳤습니다',[],1500)};
+    await rpc('fin_update',{p_id:en.id,p_date:$('#f-d').value,p_item:$('#f-i').value,p_amount:a,p_memo:$('#f-m').value});
+    // 카드 표시: 지출 항목일 때만 남긴다(수입 항목으로 바꾸면 뗀다)
+    const out=(item($('#f-i').value)||{}).kind==='지출',k=!out?null:$('#f-k')?Number($('#f-k').value)||null:en.card||null;
+    try{if(k!==(en.card||null))await rpc('fin_entry_card',{p_id:en.id,p_card:k})}catch(x){fail(x)}
+    closeDlg();await load();toast('고쳤습니다',[],1500)};
   $('#dlg').classList.add('on');
 }
 
