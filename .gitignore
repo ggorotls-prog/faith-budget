@@ -2,3 +2,10 @@
 build/
 local.properties
 backup/
+# 비밀 파일 (2026-11-19 보안 점검)
+.env
+.env.*
+*.p12
+*.jks
+*.keystore
+*.pw
