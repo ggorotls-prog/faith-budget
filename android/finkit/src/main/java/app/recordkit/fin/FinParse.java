@@ -51,7 +51,7 @@ public final class FinParse {
     private static final Pattern SKIP = Pattern.compile(
             "\\(광고\\)|\\[광고\\]|취소|거절|실패|잔액\\s*부족|인증번호|인증 번호"
                     + "|(?:입금|출금|결제|이체|송금|납부|인출)\\s*(?:될\\s*)?예정"
-                    + "|원\\s*이상");   // 「3만원 이상 써서 받았어요」 같은 조건 문구(2026-11-20 토스 황금 복권)
+                    + "|원\\s*이상|복권");   // 「황금 복권 · 3만원 이상 써서 받았어요」(2026-11-20 토스 광고, 두 번 잡혀서 「복권」도 더함)
     // 12,300원 · 5000원 · 3만원 · 3만 5,000원
     private static final Pattern WON = Pattern.compile(
             "(?<![\\d,.])(?:(\\d{1,4})만\\s*(?:(\\d{1,3}(?:,\\d{3})?|\\d{1,4})\\s*)?|(\\d{1,3}(?:,\\d{3})+|\\d{1,9})\\s*)원");
@@ -60,8 +60,14 @@ public final class FinParse {
     private static final String[] OUT = {"출금", "결제", "승인", "이체", "송금", "보냈", "나갔", "사용", "납부", "인출"};
     private static final Pattern SENT_TO_ME = Pattern.compile("님이\\s.{0,24}보냈");
 
+    // 앱 알림에는 보통 빈칸 대신 「줄바꿈 없는 빈칸」(U+00A0) 같은 글자가 섞여 온다. 자바 \s는 이걸 빈칸으로 안 본다.
+    private static final Pattern ODD_SPACE = Pattern.compile("[\\u00a0\\u1680\\u2000-\\u200b\\u202f\\u205f\\u3000\\ufeff]");
+    private static String clean(String v) { return v == null ? "" : ODD_SPACE.matcher(v).replaceAll(" "); }
+
     public static Hit parse(String title, String text) {
-        String s = ((title == null ? "" : title) + " \n " + (text == null ? "" : text)).replace("입출금", " ");
+        title = clean(title);
+        text = clean(text);
+        String s =((title == null ? "" : title) + " \n " + (text == null ? "" : text)).replace("입출금", " ");
         if (s.trim().isEmpty() || SKIP.matcher(s).find()) return null;
 
         long amount = 0;

@@ -53,6 +53,9 @@ public class FinParseTest {
         assertNull(FinParse.parse("토스", "잔액 70,000원"));
         assertNull(FinParse.parse("", ""));
         assertNull(FinParse.parse("황금 복권", "3만원 이상 써서 받았어요. 바로 긁어보세요."));
+        // 빈칸이 「줄바꿈 없는 빈칸」이어도 버린다(2026-11-20 고친 뒤에도 다시 잡힘)
+        assertNull(FinParse.parse("황금 복권", "3만원 이상 써서 받았어요. 바로 긁어보세요."));
+        assertNull(FinParse.parse("황금 복권", "3만원 이상 써서 받았어요."));
     }
 
     @Test public void 이름에_번호가_안_남는다() {
