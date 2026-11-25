@@ -846,21 +846,37 @@ function renderAlert(){
 $('#alert').onclick=()=>{const d=Object.values(F.qd).find(d=>overOf(d).length)||Object.values(F.qd).find(d=>d.book==='기업');
   if(d&&d.book!==st.data.book){const b=(me.books||[]).find(b=>b.name===d.book);if(b){st.book=b.id;st.data=F.qd[b.id];renderBooks();render()}}
   show('bud')};
-/* 기업 손익: 영역마다 매출 − 재료비 − 인건비 = 이익, 공통 경비는 따로, 전체 = 영역 이익 합 − 공통 경비 */
+/* 한 달 정산(위키 재정-기록 「한 달 정산」, 2026-11-25 룡 「시안대로」): 순이익 = 매출(이월 뺌) − 부가세(그달 매출 ÷ 11) − 사업 경비.
+   부가세 줄(부가세 칸으로 옮긴 돈·다른 돈으로 낸 부가세)은 사업 경비에서 뺀다. 십일조 예비비로 옮긴 돈은 경비 아닌 지출에서 빼고 정산 칸에만 보인다.
+   십일조 = 순이익 10%, 종소세 예비비 = 같은 금액, 떼어 둔 십일조 예비비 − 둘 = 돌려받을 돈. 이월 손실은 11/1 새로 시작이라 0. */
+const isVat=i=>i.kind==='지출'&&i.middle==='부가세';
+const isTithePut=(i,e)=>i.kind==='지출'&&i.middle==='십일조'&&(e.memo||'').replace(/\s/g,'').startsWith('십일조예비비');
+function coProfit(d){
+  const it={};d.items.forEach(i=>it[i.id]=i);
+  let sales=0,carry=0,vatBase=0,cost=0,reserve=0,nonex=0;
+  d.entries.forEach(e=>{const i=it[e.item_id];if(!i)return;const a=Number(e.amount);
+    if(i.kind==='수입'){if(i.middle==='이월')carry+=a;else{sales+=a;if(i.middle==='매출')vatBase+=a}return}
+    if(isVat(i))return;
+    if(isTithePut(i,e)){reserve+=a;return}
+    if(i.expense===false)nonex+=a;else cost+=a});
+  const vat=Math.floor(vatBase/11),net=sales-vat-cost,tithe=Math.floor(Math.max(0,net)/10);
+  return{sales,carry,vat,cost,net,tithe,tax:tithe,reserve,back:reserve-tithe*2,nonex};
+}
+/* 기업 손익: 영역마다 매출 − 재료비 − 인건비 = 이익, 공통 경비는 따로, 위 칸은 한 달 정산 식 */
 function renderProfit(){
   const act={};st.data.entries.forEach(e=>act[e.item_id]=(act[e.item_id]||0)+Number(e.amount));
   const sum=f=>items().filter(f).reduce((s,i)=>s+(act[i.id]||0),0);
   const areas=[...new Set(items().filter(i=>i.area).map(i=>i.area))];
-  const ex=i=>i.kind==='지출'&&i.expense!==false;   // 경비 아닌 지출(헌금·생활비 등)은 이익 계산에서 따로(2026-11-06 룡)
-  // 이월은 번 돈이 아니라 매출에서 뺀다(2026-11-24 룡 「추천대로」: 11월 총 매출에 이월 ***가 섞여 손익이 부풀었음)
-  const sales=sum(i=>i.kind==='수입'&&i.middle!=='이월'),carry=sum(i=>i.kind==='수입'&&i.middle==='이월'),cost=sum(i=>ex(i)&&i.area),common=sum(i=>ex(i)&&!i.area),nonex=sum(i=>i.kind==='지출'&&i.expense===false);
+  const ex=i=>i.kind==='지출'&&i.expense!==false&&!isVat(i);   // 경비 아닌 지출(헌금·생활비 등)·부가세 줄은 이익 계산에서 따로
+  const P=coProfit(st.data),common=sum(i=>ex(i)&&!i.area);
   const row=(name,v,sub='')=>`<div class="ln"><div class="t"><span>${esc(name)}</span><b class="${v<0?'neg':''}">${won(v)}</b></div>${sub?`<div class="t"><em>${sub}</em></div>`:''}</div>`;
   let h=`<div class="sum pl">
-    <div class="tile"><small>총 매출${carry?` (이월 ${won(carry)} 뺌)`:''}</small><b>${won(sales)}</b></div>
-    <div class="tile"><small>총 경비 (영역+공통)</small><b>${won(cost+common)}</b></div>
-    <div class="tile wide"><small>기업 이익 (매출 − 경비)</small><b class="${sales-cost-common<0?'neg':''}">${won(sales-cost-common)}</b></div>
-    <div class="tile"><small>경비 아닌 지출</small><b>${won(nonex)}</b></div>
-    <div class="tile"><small>이달 손익 (번 돈 − 쓴 돈)</small><b class="${sales-cost-common-nonex<0?'neg':''}">${won(sales-cost-common-nonex)}</b><em style="display:block;font-size:11px;color:var(--sub);font-style:normal">통장 잔액 아님</em></div></div>`;
+    <div class="tile"><small>총 매출${P.carry?` (이월 ${won(P.carry)} 뺌)`:''}</small><b>${won(P.sales)}</b></div>
+    <div class="tile"><small>부가세 (매출 ÷ 11)</small><b>${won(P.vat)}</b></div>
+    <div class="tile"><small>사업 경비 (영역+공통)</small><b>${won(P.cost)}</b></div>
+    <div class="tile wide"><small>순이익 (매출 − 부가세 − 사업 경비)</small><b class="${P.net<0?'neg':''}">${won(P.net)}</b></div></div>`;
+  h+=`<div class="bk pl"><h3>한 달 정산<small>순이익 기준</small></h3>`+row('십일조 (순이익 × 10%)',P.tithe)+row('종소세 예비비 (같은 금액)',P.tax)
+    +row('떼어 둔 십일조 예비비',P.reserve)+row('돌려받을 돈 (토스 메인으로)',P.back,'떼어 둔 십일조 예비비 − 십일조 − 종소세 예비비')+'</div>';
   h+=`<div class="bk pl"><h3>영역별 이익<small>매출 − 재료비 − 인건비</small></h3>`;
   areas.forEach(a=>{const s=sum(i=>i.area===a&&i.kind==='수입'&&i.middle!=='이월'),c=sum(i=>i.area===a&&ex(i));
     const lcNet=sum(i=>i.area===a&&isLC(i)),lc=lcTax(lcNet);
@@ -871,8 +887,10 @@ function renderProfit(){
   const unpaid=fixedList().filter(f=>!f.paid);
   if(unpaid.length)h+=row('아직 안 낸 고정 경비 '+unpaid.length+'건',unpaid.reduce((s,f)=>s+f.amt,0));
   h+='</div>';
-  h+=`<div class="bk pl"><h3>경비 아닌 지출<small>${won(nonex)} · 세금 계산에 안 들어감</small></h3>`;
-  [...new Set(items().filter(i=>i.kind==='지출'&&i.expense===false).map(i=>i.middle))].forEach(m=>{const v=sum(i=>i.kind==='지출'&&i.expense===false&&i.middle===m);if(v)h+=row(m,v)});
+  h+=`<div class="bk pl"><h3>경비 아닌 지출<small>${won(P.nonex)} · 세금 계산에 안 들어감</small></h3>`;
+  const nx={},iOf={};items().forEach(i=>iOf[i.id]=i);   // 십일조 예비비로 옮긴 돈은 위 「한 달 정산」에만
+  st.data.entries.forEach(e=>{const i=iOf[e.item_id];if(i&&i.kind==='지출'&&i.expense===false&&!isVat(i)&&!isTithePut(i,e))nx[i.middle]=(nx[i.middle]||0)+Number(e.amount)});
+  Object.entries(nx).forEach(([m,v])=>{if(v)h+=row(m,v)});
   h+='</div>';
   $('#bud').innerHTML=fixedHtml()+fundsHtml()+h;
 }
@@ -986,9 +1004,9 @@ async function renderDash(){
   const kpi=(t,v,sub)=>`<div class="dc kpi s3"><small>${t}</small><b class="${v<0?'neg':''}">${won(v)}</b>${sub}</div>`;
   let h='<div class="dg">';
   if(co){
-    const lc=ySum(x=>x.lc),t=lcTax(lc);
-    h+=kpi(mLbl(month)+' 매출',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 비용',n.out,delta(n.out,p.out,true))+kpi(mLbl(month)+' 이익',n.inc-n.out,'<em>매출 − 비용</em>')
-      +kpi(yr+'년 이익 (쌓인 것)',ySum(x=>x.inc-x.out),lc?`<em>오레진 수당 ${won(lc)} · 뗀 세금 ${won(t.tax)}</em>`:`<em>${yIdx.length}달 합</em>`);
+    const lc=ySum(x=>x.lc),t=lcTax(lc),cp=ds.map(coProfit),c=cp[cp.length-1],cq=cp[cp.length-2];   // 이익은 한 달 정산 식(매출 − 부가세 − 사업 경비)
+    h+=kpi(mLbl(month)+' 매출',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 사업 경비',c.cost,delta(c.cost,cq.cost,true))+kpi(mLbl(month)+' 순이익',c.net,`<em>매출 − 부가세 ${won(c.vat)} − 사업 경비</em>`)
+      +kpi(yr+'년 순이익 (쌓인 것)',yIdx.reduce((s,k)=>s+cp[k].net,0),lc?`<em>오레진 수당 ${won(lc)} · 뗀 세금 ${won(t.tax)}</em>`:`<em>${yIdx.length}달 합</em>`);
   }else{
     const it=d.items.filter(i=>i.kind==='지출'),base=baseOf(d),plan=it.reduce((s,i)=>s+budgetOf(i,base,d),0);
     h+=kpi(mLbl(month)+' 수입',n.inc,delta(n.inc,p.inc,false))+kpi(mLbl(month)+' 지출',n.out,delta(n.out,p.out,true))
@@ -998,7 +1016,7 @@ async function renderDash(){
   if(co){
     const areas=[...new Set(d.items.filter(i=>i.area).map(i=>i.area))],acc={};
     yIdx.forEach(k=>{const dd=ds[k],it={};dd.items.forEach(i=>it[i.id]=i);
-      dd.entries.forEach(e=>{const i=it[e.item_id];if(i&&i.area)acc[i.area]=(acc[i.area]||0)+(i.kind==='수입'?1:-1)*Number(e.amount)})});
+      dd.entries.forEach(e=>{const i=it[e.item_id];if(i&&i.area&&i.middle!=='이월'&&!isVat(i)&&(i.kind==='수입'||i.expense!==false))acc[i.area]=(acc[i.area]||0)+(i.kind==='수입'?1:-1)*Number(e.amount)})});
     h+=`<div class="dc s4 pl"><h3>${yr}년 영역별 이익<small>매출 − 재료비 − 인건비</small></h3>${areas.map(a=>{const v=acc[a]||0;return `<div class="ln"><div class="t"><span>${esc(a)}</span><b class="${v<0?'neg':''}">${won(v)}</b></div></div>`}).join('')}</div>`;
   }else{
     const ov=overOf(d);
