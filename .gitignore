@@ -9,3 +9,6 @@ backup/
 *.jks
 *.keystore
 *.pw
+
+# DB 작업 파일은 드라이브에만 (2026-11-25 보안 점검)
+sql/
