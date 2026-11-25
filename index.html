@@ -102,8 +102,8 @@ a.main-btn{display:block;text-align:center;text-decoration:none}
 #auth p{margin:0 0 20px;color:var(--sub)}
 #auth form{background:var(--card);border-radius:14px;padding:16px;max-width:360px;margin:0 auto}
 [hidden]{display:none!important}
-/* 알림·창 */
-#toast{position:fixed;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom));background:#1c2420;color:#fff;border-radius:12px;padding:12px 14px;display:none;gap:10px;align-items:center;flex-wrap:wrap;z-index:9}
+/* 알림·창. 알림(「기록 · 취소」)은 맨 위에: 아래에 두면 오른쪽 아래 − 버튼과 겹쳐 −를 누르면 취소가 눌림(2026-11-25 룡) */
+#toast{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));background:#1c2420;color:#fff;border-radius:12px;padding:12px 14px;display:none;gap:10px;align-items:center;flex-wrap:wrap;z-index:9}
 #toast.on{display:flex}
 #toast span{flex:1;min-width:140px}
 #toast button{color:#8fe0bd;font-weight:700;padding:4px 6px}
@@ -199,7 +199,7 @@ a.main-btn{display:block;text-align:center;text-decoration:none}
 .pc #nav button{flex:none;padding:12px 22px}
 .pc #nav button.on{box-shadow:inset 0 -3px 0 var(--main)}
 .pc main#v-rec,.pc main#v-list,.pc main#v-bud{width:100%;max-width:560px;margin:0 auto}
-.pc #toast{left:50%;right:auto;transform:translateX(-50%);width:min(560px,90vw);bottom:24px}
+.pc #toast{left:50%;right:auto;transform:translateX(-50%);width:min(560px,90vw);top:24px}
 .pc #dlg{align-items:center;justify-content:center}.pc #dlg form{max-width:480px;border-radius:16px}
 #dash{padding:0 24px 32px}
 .dg{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;max-width:1240px;margin:0 auto}
